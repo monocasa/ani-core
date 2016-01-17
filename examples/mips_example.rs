@@ -6,8 +6,6 @@ const RAM_SIZE: u64 = 2 * 1024 * 1024;
 fn test_mips(test_name: &str, opt: ani_core::CpuOpt, code_buffer: &[u8]) -> Result<(), ani_core::Error> {
 	println!("Emulate MIPS code ({})", test_name);
 
-	let end_of_code = RAM_BASE + (code_buffer.len() as u64) - 1;
-
 	let mut system = ani_core::System::new();
 
 	try!(system.add_ram_region(ani_core::PROT_ALL, RAM_BASE, RAM_SIZE));
@@ -30,9 +28,12 @@ fn test_mips(test_name: &str, opt: ani_core::CpuOpt, code_buffer: &[u8]) -> Resu
 		println!(">>> Tracing instruction at {:#x}, instruction size = {:#x}", address, size)
 	)));
 
+	let expected_exit_pc = RAM_BASE + (code_buffer.len() as u64);
+	let end_of_code = expected_exit_pc - 1;
+
 	let exit_reason = try!(cpu.execute_range(RAM_BASE, end_of_code));
 
-	if exit_reason != ani_core::ExitReason::PcOutOfRange(end_of_code + 1) {
+	if exit_reason != ani_core::ExitReason::PcOutOfRange(expected_exit_pc) {
 		panic!("Unexpected exit reason:  {:?}", exit_reason);
 	}
 
