@@ -2,6 +2,7 @@
 #[macro_use]
 extern crate bitflags;
 
+pub mod iisa;
 pub mod mips;
 
 bitflags! {
@@ -37,6 +38,10 @@ pub enum CpuReg {
 
 #[derive(Debug)]
 pub enum Error {
+	Unimplemented,
+
+	InvalidCpuCookie,
+
 	OptNotSupported(CpuOpt),
 	UnimplementedArchitecture,
 
@@ -63,12 +68,22 @@ struct MemSlot {
 #[allow(dead_code)]
 pub struct System {
 	mem_slots: Vec<MemSlot>,
+	cpus: Vec<Box<Cpu>>,
+}
+
+pub struct CpuCookie {
+	handle: usize,
+}
+
+pub enum Arch {
+	Mips(mips::Arch),
 }
 
 impl System {
 	pub fn new() -> System {
 		System {
 			mem_slots: Vec::new(),
+			cpus: Vec::new(),
 		}
 	}
 
@@ -81,6 +96,30 @@ impl System {
 		});
 
 		Ok(())
+	}
+
+	pub fn register_cpu(&mut self, opts: CpuOpt, arch: Arch) -> Result<CpuCookie, Error> {
+		Ok(CpuCookie{handle: 0})
+	}
+
+	pub fn set_cpu_reg(&mut self, cpu_cookie: &CpuCookie, reg: CpuReg, value: u64) -> Result<(), Error> {
+		Err(Error::Unimplemented)
+	}
+
+	pub fn add_block_hook_all(&mut self, hook: Box<Fn(u64, u64)>) -> Result<(), Error> {
+		Err(Error::Unimplemented)
+	}
+
+	pub fn add_code_hook_single(&mut self, base: u64, hook: Box<Fn(u64, u64)>) -> Result<(), Error> {
+		Err(Error::Unimplemented)
+	}
+
+	pub fn execute_cpu_range(&mut self, cpu_cookie: &CpuCookie, base: u64, end: u64) -> Result<ExitReason, Error> {
+		Err(Error::Unimplemented)
+	}
+
+	pub fn get_cpu_reg(&mut self, cpu_cookie: &CpuCookie, reg: CpuReg) -> Result<u64, Error> {
+		Err(Error::Unimplemented)
 	}
 
 	#[allow(unused_variables)]
