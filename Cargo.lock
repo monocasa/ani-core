@@ -3,10 +3,16 @@ name = "ani-core"
 version = "0.1.0"
 dependencies = [
  "bitflags 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "opcode 0.1.0 (git+https://github.com/monocasa/opcode.git)",
 ]
 
 [[package]]
 name = "bitflags"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "opcode"
+version = "0.1.0"
+source = "git+https://github.com/monocasa/opcode.git#d5000466b41527fa5dead13ac292b6579e0f6759"
 

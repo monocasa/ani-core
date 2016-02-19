@@ -1,3 +1,5 @@
+#![feature(const_fn)]
+
 #![cfg_attr(feature = "assignment_operators", feature(augmented_assignments, op_assign_traits))]
 #[macro_use]
 extern crate bitflags;

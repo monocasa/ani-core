@@ -1,6 +1,7 @@
-#[derive(PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum R {
 	Ip,
+	Discard,
 
 	P(u8),
 	Pred(u64),
@@ -17,7 +18,7 @@ pub enum R {
 	TX(u16),
 }
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Src {
 	Reg(R),
 	ImmU8(u8),
@@ -31,30 +32,30 @@ pub enum Src {
 	Addr(u64),
 }
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct DstSrcSrc {
 	dst: R,
 	src: [Src; 2],
 }
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct SrcSrcSrc {
 	src: [Src; 3],
 }
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct DstSrc {
-	dst: R,
-	src: Src,
+	pub dst: R,
+	pub src: Src,
 }
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct SrcSrcTarget {
 	src: [Src; 2],
 	target: Src,
 }
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Cond {
 	Ne,
 	Eq,
@@ -64,7 +65,7 @@ pub enum Cond {
 	Lt,
 }
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Op {
 	Nop,
 
@@ -100,18 +101,18 @@ pub enum Op {
 	J(Src),
 }
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Pred {
 	None,
 	Pred(R),
 	NotPred(R),
 }
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Instr {
-	op: Op,
-	pred: Pred,
-	exc: u8,
-	size: u8,
+	pub op: Op,
+	pub pred: Pred,
+	pub exc: u8,
+	pub size: u8,
 }
 

@@ -6,9 +6,19 @@ use super::{Cpu,
             ExitReason,
             System};
 
+pub mod translate;
+
 #[derive(PartialEq)]
 pub enum Arch {
 	R2000,
+	Sys161,
+	VR4300,
+}
+
+impl Default for Arch {
+	fn default() -> Arch {
+		Arch::R2000
+	}
 }
 
 pub const REG_AT: CpuReg = CpuReg::CpuSpecific(1);
@@ -115,21 +125,5 @@ impl Cpu for SimpleMips32InterpreterCore {
 
 		Ok(())
 	}
-}
-
-#[allow(unused_variables)]
-pub fn build_cpu(system: &mut System, opts: CpuOpt, arch: Arch) -> Result<Box<Cpu>, Error> {
-	let is_big: bool = (opts & CPU_ENDIAN_BIG) == CPU_ENDIAN_BIG;
-
-	Ok(match arch {
-		Arch::R2000 => {
-			Box::new(
-				SimpleMips32InterpreterCore {
-					be: is_big,
-					.. SimpleMips32InterpreterCore::new()
-				}
-			)
-		},
-	})
 }
 
