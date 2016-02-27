@@ -117,3 +117,14 @@ pub struct Instr {
 	pub size: u8,
 }
 
+pub fn is_end_of_block(op: &Op) -> bool {
+	match *op {
+		Op::Call(_) => true,
+		Op::B(_, _) => true,
+		Op::Exc     => true,
+		Op::J(_)    => true,
+
+		_ => false,
+	}
+}
+
