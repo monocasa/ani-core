@@ -46,6 +46,13 @@ fn src_u32(imm: u32) -> iisa::Src {
 	iisa::Src::ImmU32(imm)
 }
 
+fn sw_src(gpr_num: u8) -> iisa::Src {
+	match gpr_num {
+		0 => iisa::Src::ImmU32(0),
+		_ => iisa::Src::Reg(iisa::R::W(gpr_num as u16)),
+	}
+}
+
 #[allow(unused_variables)]
 fn decode_mips32(arch: &Arch, base: u64, op: &opcode::mips::Op) -> Result<Vec<iisa::Instr>, io::Error> {
 	let result = match *op {
@@ -58,6 +65,13 @@ fn decode_mips32(arch: &Arch, base: u64, op: &opcode::mips::Op) -> Result<Vec<ii
 
 		opcode::mips::Op::RtU16(opcode::mips::Mne::Lui, opcode::mips::Reg::Gpr(rt), imm) => {
 			iisa::Op::Ld(iisa::DstSrc{dst: dest_gpr(rt), src: src_u32((imm as u32) << 16)})
+		},
+
+		opcode::mips::Op::RtOffsetBase(opcode::mips::Mne::Sw,
+		                               opcode::mips::Reg::Gpr(rt),
+		                               offset,
+		                               opcode::mips::Reg::Gpr(base)) => {
+			iisa::Op::Sw(iisa::SrcSrcSrc{src: [sw_src(rt), src_i16(offset), src_gpr(base)]})
 		},
 
 		_ => {
@@ -115,7 +129,7 @@ impl MipsTranslator {
 
 #[cfg(test)]
 mod tests {
-	use super::super::super::iisa::{DstSrc, DstSrcSrc, Instr, Op, Pred, R, Src};
+	use super::super::super::iisa::{DstSrc, DstSrcSrc, Instr, Op, Pred, R, Src, SrcSrcSrc};
 	use super::super::Arch;
 	use super::MipsTranslator;
 
@@ -149,10 +163,13 @@ mod tests {
 		);
 	}
 
-	test_simple_r2000!( r2000_addiu__gp___gp_neg12272, 0x279cd010, Op::Add(DstSrcSrc{dst: R::W(28), src: [Src::Reg(R::W(28)), Src::ImmI16(-12272)]}) );
-	test_simple_r2000!( r2000_addiu__a0___s0_neg14244, 0x2604c85c, Op::Add(DstSrcSrc{dst: R::W(4),  src: [Src::Reg(R::W(16)), Src::ImmI16(-14244)]}) );
+	test_simple_r2000!( r2000_addiu__gp___gp_neg12272, 0x279cd010u32, Op::Add(DstSrcSrc{dst: R::W(28), src: [Src::Reg(R::W(28)), Src::ImmI16(-12272)]}) );
+	test_simple_r2000!( r2000_addiu__a0___s0_neg14244, 0x2604c85cu32, Op::Add(DstSrcSrc{dst: R::W(4),  src: [Src::Reg(R::W(16)), Src::ImmI16(-14244)]}) );
 
-	test_simple_r2000!( r2000_lui____zero_0xabcd,      0x3c00abcd, Op::Ld(DstSrc{dst: R::Discard, src: Src::ImmU32(0xABCD0000)}) );
-	test_simple_r2000!( r2000_lui____gp___0x8072,      0x3c1c8072, Op::Ld(DstSrc{dst: R::W(28),   src: Src::ImmU32(0x80720000)}) );
+	test_simple_r2000!( r2000_lui____zero_0xabcd,      0x3c00abcdu32, Op::Ld(DstSrc{dst: R::Discard, src: Src::ImmU32(0xABCD0000)}) );
+	test_simple_r2000!( r2000_lui____gp___0x8072,      0x3c1c8072u32, Op::Ld(DstSrc{dst: R::W(28),   src: Src::ImmU32(0x80720000)}) );
+
+	test_simple_r2000!( r2000_sw_____zero_20_____sp,   0xafa00014u32, Op::Sw(SrcSrcSrc{src: [Src::ImmU32(0),     Src::ImmI16(  20), Src::Reg(R::W(29))]}) );
+	test_simple_r2000!( r2000_sw_____s3___neg336_gp,   0xaf93feb0u32, Op::Sw(SrcSrcSrc{src: [Src::Reg(R::W(19)), Src::ImmI16(-336), Src::Reg(R::W(28))]}) );
 }
 
