@@ -42,6 +42,10 @@ fn src_i16(imm: i16) -> iisa::Src {
 	iisa::Src::ImmI16(imm)
 }
 
+fn src_u16(imm: u16) -> iisa::Src {
+	iisa::Src::ImmU16(imm)
+}
+
 fn src_u32(imm: u32) -> iisa::Src {
 	iisa::Src::ImmU32(imm)
 }
@@ -61,6 +65,13 @@ fn decode_mips32(arch: &Arch, base: u64, op: &opcode::mips::Op) -> Result<Vec<ii
 		                          opcode::mips::Reg::Gpr(rs),
 		                          imm) => {
 			iisa::Op::Add(iisa::DstSrcSrc{dst: dest_gpr(rt), src: [src_gpr(rs), src_i16(imm)]})
+		},
+
+		opcode::mips::Op::RtRsU16(opcode::mips::Mne::Ori,
+		                          opcode::mips::Reg::Gpr(rt),
+		                          opcode::mips::Reg::Gpr(rs),
+		                          imm) => {
+			iisa::Op::Or(iisa::DstSrcSrc{dst: dest_gpr(rt), src: [src_gpr(rs), src_u16(imm)]})
 		},
 
 		opcode::mips::Op::RtU16(opcode::mips::Mne::Lui, opcode::mips::Reg::Gpr(rt), imm) => {
@@ -168,6 +179,9 @@ mod tests {
 
 	test_simple_r2000!( r2000_lui____zero_0xabcd,      0x3c00abcdu32, Op::Ld(DstSrc{dst: R::Discard, src: Src::ImmU32(0xABCD0000)}) );
 	test_simple_r2000!( r2000_lui____gp___0x8072,      0x3c1c8072u32, Op::Ld(DstSrc{dst: R::W(28),   src: Src::ImmU32(0x80720000)}) );
+
+	test_simple_r2000!( r2000_ori____gp___gp_0x4354,   0x34214354u32, Op::Or(DstSrcSrc{dst: R::W(1), src: [Src::Reg(R::W(1)), Src::ImmU16(0x4354)]}) );
+	test_simple_r2000!( r2000_ori____v0___v0_0xbabe,   0x3442babeu32, Op::Or(DstSrcSrc{dst: R::W(2), src: [Src::Reg(R::W(2)), Src::ImmU16(0xBABE)]}) );
 
 	test_simple_r2000!( r2000_sw_____zero_20_____sp,   0xafa00014u32, Op::Sw(SrcSrcSrc{src: [Src::ImmU32(0),     Src::ImmI16(  20), Src::Reg(R::W(29))]}) );
 	test_simple_r2000!( r2000_sw_____s3___neg336_gp,   0xaf93feb0u32, Op::Sw(SrcSrcSrc{src: [Src::Reg(R::W(19)), Src::ImmI16(-336), Src::Reg(R::W(28))]}) );
