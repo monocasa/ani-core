@@ -34,14 +34,33 @@ fn dest_gpr(gpr_num: u8) -> iisa::R {
 	}
 }
 
+fn src_gpr(gpr_num: u8) -> iisa::Src {
+	iisa::Src::Reg(iisa::R::W(gpr_num as u16))
+}
+
+fn src_i16(imm: i16) -> iisa::Src {
+	iisa::Src::ImmI16(imm)
+}
+
+fn src_u32(imm: u32) -> iisa::Src {
+	iisa::Src::ImmU32(imm)
+}
+
 fn decode_mips32(arch: &Arch, base: u64, op: &opcode::mips::Op) -> Result<Vec<iisa::Instr>, io::Error> {
 	let result = match *op {
-		opcode::mips::Op::RtU16(opcode::mips::Mne::Lui, opcode::mips::Reg::Gpr(gpr), imm) => {
-			iisa::Op::Ld(iisa::DstSrc{dst: dest_gpr(gpr), src: iisa::Src::ImmU32((imm as u32) << 16)})
+		opcode::mips::Op::RtRsI16(opcode::mips::Mne::Addiu,
+		                          opcode::mips::Reg::Gpr(rt),
+		                          opcode::mips::Reg::Gpr(rs),
+		                          imm) => {
+			iisa::Op::Add(iisa::DstSrcSrc{dst: dest_gpr(rt), src: [src_gpr(rs), src_i16(imm)]})
+		},
+
+		opcode::mips::Op::RtU16(opcode::mips::Mne::Lui, opcode::mips::Reg::Gpr(rt), imm) => {
+			iisa::Op::Ld(iisa::DstSrc{dst: dest_gpr(rt), src: src_u32((imm as u32) << 16)})
 		},
 
 		_ => {
-			return Err(io::Error::new(io::ErrorKind::Other, "mips32 decode Unimplemented"));
+			return Err(io::Error::new(io::ErrorKind::Other, format!("mips32 decode Unimplemented {:?}", op)));
 		},
 	};
 
@@ -95,7 +114,7 @@ impl MipsTranslator {
 
 #[cfg(test)]
 mod tests {
-	use super::super::super::iisa::{DstSrc, Instr, Op, Pred, R, Src};
+	use super::super::super::iisa::{DstSrc, DstSrcSrc, Instr, Op, Pred, R, Src};
 	use super::super::Arch;
 	use super::MipsTranslator;
 
@@ -103,10 +122,14 @@ mod tests {
 		Normal{ instr: u32, translated: Op },
 	}
 
-	static MIPS32_TESTCASES: [TestCase; 2] = [
+	static MIPS32_TESTCASES: [TestCase; 4] = [
+		// 279cd010 : addiu   gp,gp,-12272    | add     w28,w28,-12272
+		TestCase::Normal{ instr: 0x279cd010, translated: Op::Add(DstSrcSrc{dst: R::W(28), src: [Src::Reg(R::W(28)), Src::ImmI16(-12272)]})},
+		// 2604c85c : addiu   a0,s0,-14244    | add     w4,w16,-14244
+		TestCase::Normal{ instr: 0x2604c85c, translated: Op::Add(DstSrcSrc{dst: R::W(4), src: [Src::Reg(R::W(16)), Src::ImmI16(-14244)]})},
+
 		// 3c00abcd : lui     zero,0xabcd     | ld      discard,0x80720000
 		TestCase::Normal{ instr: 0x3c00abcd, translated: Op::Ld(DstSrc{dst: R::Discard, src: Src::ImmU32(0xABCD0000)}) },
-
 		// 3c1c8072 : lui     gp,0x8072       | ld      w28,0x80720000
 		TestCase::Normal{ instr: 0x3c1c8072, translated: Op::Ld(DstSrc{dst: R::W(28), src: Src::ImmU32(0x80720000)}) },
 	];

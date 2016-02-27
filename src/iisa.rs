@@ -2,6 +2,7 @@
 pub enum R {
 	Ip,
 	Discard,
+	Zero,
 
 	P(u8),
 	Pred(u64),
@@ -34,13 +35,13 @@ pub enum Src {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct DstSrcSrc {
-	dst: R,
-	src: [Src; 2],
+	pub dst: R,
+	pub src: [Src; 2],
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct SrcSrcSrc {
-	src: [Src; 3],
+	pub src: [Src; 3],
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -51,8 +52,8 @@ pub struct DstSrc {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct SrcSrcTarget {
-	src: [Src; 2],
-	target: Src,
+	pub src: [Src; 2],
+	pub target: Src,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
