@@ -118,42 +118,39 @@ mod tests {
 	use super::super::Arch;
 	use super::MipsTranslator;
 
-	enum TestCase {
-		Normal{ instr: u32, translated: Op },
-	}
+	macro_rules! test_simple_r2000 {
+		($func_name:ident, $instr:expr, $translated:expr) => (
+			#[test]
+			fn $func_name() {
+				let translator_be = MipsTranslator{ arch: Arch::R2000, big_endian: true };
+				let translator_le = MipsTranslator{ arch: Arch::R2000, big_endian: false };
 
-	static MIPS32_TESTCASES: [TestCase; 4] = [
-		// 279cd010 : addiu   gp,gp,-12272    | add     w28,w28,-12272
-		TestCase::Normal{ instr: 0x279cd010, translated: Op::Add(DstSrcSrc{dst: R::W(28), src: [Src::Reg(R::W(28)), Src::ImmI16(-12272)]})},
-		// 2604c85c : addiu   a0,s0,-14244    | add     w4,w16,-14244
-		TestCase::Normal{ instr: 0x2604c85c, translated: Op::Add(DstSrcSrc{dst: R::W(4), src: [Src::Reg(R::W(16)), Src::ImmI16(-14244)]})},
+				let buffer_be: [u8; 4] = [
+					($instr >> 24) as u8,
+					($instr >> 16) as u8,
+					($instr >>  8) as u8,
+					($instr >>  0) as u8,
+				];
 
-		// 3c00abcd : lui     zero,0xabcd     | ld      discard,0x80720000
-		TestCase::Normal{ instr: 0x3c00abcd, translated: Op::Ld(DstSrc{dst: R::Discard, src: Src::ImmU32(0xABCD0000)}) },
-		// 3c1c8072 : lui     gp,0x8072       | ld      w28,0x80720000
-		TestCase::Normal{ instr: 0x3c1c8072, translated: Op::Ld(DstSrc{dst: R::W(28), src: Src::ImmU32(0x80720000)}) },
-	];
+				let buffer_le: [u8; 4] = [
+					($instr >>  0) as u8,
+					($instr >>  8) as u8,
+					($instr >> 16) as u8,
+					($instr >> 24) as u8,
+				];
 
-	#[test]
-	fn translate_r2000() {
-		let mut translator = MipsTranslator{ arch: Arch::R2000, big_endian: true };
-
-		for test_case in MIPS32_TESTCASES.iter() {
-			match test_case {
-				&TestCase::Normal{instr, ref translated} => {
-					let buffer_be: [u8; 4] = [
-						(instr >> 24) as u8,
-						(instr >> 16) as u8,
-						(instr >>  8) as u8,
-						(instr >>  0) as u8,
-					];
-
-					translator.big_endian = true;
-					let iisa = translator.decode(0, &buffer_be).unwrap();
-					assert_eq!(iisa, vec!(Instr{op: translated.clone(), pred: Pred::None, exc: 0, size: 4}));
-				},
+				let iisa_be = translator_be.decode(0, &buffer_be).unwrap();
+				let iisa_le = translator_le.decode(0, &buffer_le).unwrap();
+				assert_eq!(iisa_be, vec!(Instr{op: $translated, pred: Pred::None, exc: 0, size: 4}));
+				assert_eq!(iisa_le, vec!(Instr{op: $translated, pred: Pred::None, exc: 0, size: 4}));
 			}
-		}
+		);
 	}
+
+	test_simple_r2000!( r2000_addiu__gp___gp_neg12272, 0x279cd010, Op::Add(DstSrcSrc{dst: R::W(28), src: [Src::Reg(R::W(28)), Src::ImmI16(-12272)]}) );
+	test_simple_r2000!( r2000_addiu__a0___s0_neg14244, 0x2604c85c, Op::Add(DstSrcSrc{dst: R::W(4),  src: [Src::Reg(R::W(16)), Src::ImmI16(-14244)]}) );
+
+	test_simple_r2000!( r2000_lui____zero_0xabcd,      0x3c00abcd, Op::Ld(DstSrc{dst: R::Discard, src: Src::ImmU32(0xABCD0000)}) );
+	test_simple_r2000!( r2000_lui____gp___0x8072,      0x3c1c8072, Op::Ld(DstSrc{dst: R::W(28),   src: Src::ImmU32(0x80720000)}) );
 }
 
