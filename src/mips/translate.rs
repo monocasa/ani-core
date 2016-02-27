@@ -46,6 +46,7 @@ fn src_u32(imm: u32) -> iisa::Src {
 	iisa::Src::ImmU32(imm)
 }
 
+#[allow(unused_variables)]
 fn decode_mips32(arch: &Arch, base: u64, op: &opcode::mips::Op) -> Result<Vec<iisa::Instr>, io::Error> {
 	let result = match *op {
 		opcode::mips::Op::RtRsI16(opcode::mips::Mne::Addiu,
@@ -121,6 +122,7 @@ mod tests {
 	macro_rules! test_simple_r2000 {
 		($func_name:ident, $instr:expr, $translated:expr) => (
 			#[test]
+			#[allow(non_snake_case)]
 			fn $func_name() {
 				let translator_be = MipsTranslator{ arch: Arch::R2000, big_endian: true };
 				let translator_le = MipsTranslator{ arch: Arch::R2000, big_endian: false };

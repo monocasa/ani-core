@@ -1,10 +1,7 @@
 use super::{Cpu,
-            CPU_ENDIAN_BIG,
             CpuReg,
-            CpuOpt,
             Error,
-            ExitReason,
-            System};
+            ExitReason};
 
 pub mod translate;
 
@@ -42,7 +39,7 @@ struct CodeHook {
 
 #[derive(Default)]
 #[allow(dead_code)]
-struct SimpleMips32InterpreterCore {
+pub struct SimpleMips32InterpreterCore {
 	gprs: [u32; 32],
 	pc: u32,
 	be: bool,
@@ -51,7 +48,7 @@ struct SimpleMips32InterpreterCore {
 }
 
 impl SimpleMips32InterpreterCore {
-	fn new() -> SimpleMips32InterpreterCore {
+	pub fn new() -> SimpleMips32InterpreterCore {
 		Default::default()
 	}
 }

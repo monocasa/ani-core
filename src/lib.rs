@@ -73,6 +73,7 @@ pub struct System {
 	cpus: Vec<Box<Cpu>>,
 }
 
+#[allow(dead_code)]
 pub struct CpuCookie {
 	handle: usize,
 }
@@ -100,26 +101,32 @@ impl System {
 		Ok(())
 	}
 
+	#[allow(unused_variables)]
 	pub fn register_cpu(&mut self, opts: CpuOpt, arch: Arch) -> Result<CpuCookie, Error> {
 		Ok(CpuCookie{handle: 0})
 	}
 
+	#[allow(unused_variables)]
 	pub fn set_cpu_reg(&mut self, cpu_cookie: &CpuCookie, reg: CpuReg, value: u64) -> Result<(), Error> {
 		Err(Error::Unimplemented)
 	}
 
+	#[allow(unused_variables)]
 	pub fn add_block_hook_all(&mut self, hook: Box<Fn(u64, u64)>) -> Result<(), Error> {
 		Err(Error::Unimplemented)
 	}
 
+	#[allow(unused_variables)]
 	pub fn add_code_hook_single(&mut self, base: u64, hook: Box<Fn(u64, u64)>) -> Result<(), Error> {
 		Err(Error::Unimplemented)
 	}
 
+	#[allow(unused_variables)]
 	pub fn execute_cpu_range(&mut self, cpu_cookie: &CpuCookie, base: u64, end: u64) -> Result<ExitReason, Error> {
 		Err(Error::Unimplemented)
 	}
 
+	#[allow(unused_variables)]
 	pub fn get_cpu_reg(&mut self, cpu_cookie: &CpuCookie, reg: CpuReg) -> Result<u64, Error> {
 		Err(Error::Unimplemented)
 	}
