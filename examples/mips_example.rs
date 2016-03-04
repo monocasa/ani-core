@@ -9,7 +9,7 @@ fn test_mips(test_name: &str, opt: ani_core::CpuOpt, code_buffer: &[u8]) -> Resu
 
 	let mut system = ani_core::System::new();
 
-	try!(system.add_ram_region(ani_core::PROT_ALL, ROM_BASE, ROM_SIZE));
+	try!(system.add_mappable_region(ani_core::PROT_ALL, ROM_BASE, ROM_SIZE));
 
 	try!(system.write_range(code_buffer, ROM_BASE));
 

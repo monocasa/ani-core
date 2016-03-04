@@ -90,7 +90,7 @@ impl System {
 		}
 	}
 
-	pub fn add_ram_region(&mut self, prot: MemProt, base: u64, size: u64) -> Result<(), Error> {
+	pub fn add_mappable_region(&mut self, prot: MemProt, base: u64, size: u64) -> Result<(), Error> {
 		self.mem_slots.push(MemSlot {
 			base: base,
 			size: size,
