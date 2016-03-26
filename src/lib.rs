@@ -8,6 +8,9 @@ pub mod iisa;
 pub mod mem;
 pub mod mips;
 
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
 bitflags! {
 	flags MemProt: u8 {
 		const PROT_READ  = 0b0001,
@@ -60,7 +63,8 @@ pub enum Error {
 #[allow(dead_code)]
 pub struct System {
 	fsb: mem::MemMap,
-	cpus: Vec<Box<Cpu>>,
+	cpus: BTreeMap<usize, Box<Cpu>>,
+	next_cpu_handle: usize,
 }
 
 #[allow(dead_code)]
@@ -72,11 +76,20 @@ pub enum Arch {
 	Mips(mips::Arch),
 }
 
+fn create_cpu(opts: CpuOpt, arch: Arch) -> Result<Box<Cpu>, Error> {
+	match arch {
+		Arch::Mips(mips_info) => {
+			Ok(mips::mips_cpu_factory(opts, mips_info))
+		},
+	}
+}
+
 impl System {
 	pub fn new() -> System {
 		System {
 			fsb: Default::default(),
-			cpus: Vec::new(),
+			cpus: BTreeMap::new(),
+			next_cpu_handle: 0,
 		}
 	}
 
@@ -84,34 +97,55 @@ impl System {
 		self.fsb.add_mappable_range(base, size, prot)
 	}
 
-	#[allow(unused_variables)]
+	fn register_cpu_no_throw(&mut self, cpu: Box<Cpu>) -> CpuCookie {
+		let this_handle = self.next_cpu_handle;
+
+		self.next_cpu_handle += 1;
+
+		let _ = self.cpus.insert(this_handle, cpu);
+
+		CpuCookie{handle: this_handle}
+	}
+
 	pub fn register_cpu(&mut self, opts: CpuOpt, arch: Arch) -> Result<CpuCookie, Error> {
-		Err(Error::Unimplemented("register_cpu"))
+		let cpu = try!(create_cpu(opts, arch));
+
+		Ok(self.register_cpu_no_throw(cpu))
 	}
 
-	#[allow(unused_variables)]
+	fn get_cpu(&mut self, cookie: &CpuCookie) -> Result<&mut Box<Cpu>, Error> {
+		match self.cpus.get_mut(&cookie.handle) {
+			Some(cpu) => Ok(cpu),
+			None      => Err(Error::InvalidCpuCookie),
+		}
+	}
+
 	pub fn set_cpu_reg(&mut self, cpu_cookie: &CpuCookie, reg: CpuReg, value: u64) -> Result<(), Error> {
-		Err(Error::Unimplemented("set_cpu_reg"))
+		try!(self.get_cpu(cpu_cookie)).set_reg(reg, value)
 	}
 
-	#[allow(unused_variables)]
-	pub fn add_block_hook_all(&mut self, hook: Box<Fn(u64, u64)>) -> Result<(), Error> {
-		Err(Error::Unimplemented("add_block_hook_all"))
+	pub fn add_block_hook_all(&mut self, hook: Arc<Fn(u64, u64)>) -> Result<(), Error> {
+		for (_, cpu) in self.cpus.iter_mut() {
+			try!(cpu.add_block_hook_all(hook.clone()));
+		}
+
+		Ok(())
 	}
 
-	#[allow(unused_variables)]
-	pub fn add_code_hook_single(&mut self, base: u64, hook: Box<Fn(u64, u64)>) -> Result<(), Error> {
-		Err(Error::Unimplemented("add_code_hook_single"))
+	pub fn add_code_hook_single(&mut self, base: u64, hook: Arc<Fn(u64, u64)>) -> Result<(), Error> {
+		for(_, cpu) in self.cpus.iter_mut() {
+			try!(cpu.add_code_hook_single(base, hook.clone()));
+		}
+
+		Ok(())
 	}
 
-	#[allow(unused_variables)]
 	pub fn execute_cpu_range(&mut self, cpu_cookie: &CpuCookie, base: u64, end: u64) -> Result<ExitReason, Error> {
-		Err(Error::Unimplemented("execute_cpu_range"))
+		try!(self.get_cpu(cpu_cookie)).execute_range(base, end)
 	}
 
-	#[allow(unused_variables)]
 	pub fn get_cpu_reg(&mut self, cpu_cookie: &CpuCookie, reg: CpuReg) -> Result<u64, Error> {
-		Err(Error::Unimplemented("get_cpu_reg"))
+		try!(self.get_cpu(cpu_cookie)).get_reg(reg)
 	}
 
 	pub fn set_range(&mut self, incoming: &[u8], base_addr: u64) -> Result<(), Error> {
@@ -126,7 +160,7 @@ pub trait Cpu {
 
 	fn set_reg(&mut self, reg: CpuReg, value: u64) -> Result<(), Error>;
 
-	fn add_block_hook_all(&mut self, hook: Box<Fn(u64, u64)>) -> Result<(), Error>;
-	fn add_code_hook_single(&mut self, base: u64, hook: Box<Fn(u64, u64)>) -> Result<(), Error>;
+	fn add_block_hook_all(&mut self, hook: Arc<Fn(u64, u64)>) -> Result<(), Error>;
+	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Fn(u64, u64)>) -> Result<(), Error>;
 }
 

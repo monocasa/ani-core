@@ -1,7 +1,10 @@
 use super::{Cpu,
+            CpuOpt,
             CpuReg,
             Error,
             ExitReason};
+
+use std::sync::Arc;
 
 pub mod translate;
 
@@ -28,13 +31,13 @@ enum HookRange {
 #[allow(dead_code)]
 struct BlockHook {
 	range: HookRange,
-	hook: Box<Fn(u64, u64)>,
+	hook: Arc<Fn(u64, u64)>,
 }
 
 #[allow(dead_code)]
 struct CodeHook {
 	base: u64,
-	hook: Box<Fn(u64, u64)>,
+	hook: Arc<Fn(u64, u64)>,
 }
 
 #[derive(Default)]
@@ -51,6 +54,11 @@ impl SimpleMips32InterpreterCore {
 	pub fn new() -> SimpleMips32InterpreterCore {
 		Default::default()
 	}
+}
+
+#[allow(unused_variables)]
+pub fn mips_cpu_factory(opts: CpuOpt, arch: Arch) -> Box<Cpu> {
+	Box::<SimpleMips32InterpreterCore>::new(SimpleMips32InterpreterCore::new())
 }
 
 impl Cpu for SimpleMips32InterpreterCore {
@@ -105,7 +113,7 @@ impl Cpu for SimpleMips32InterpreterCore {
 		Ok(())
 	}
 
-	fn add_block_hook_all(&mut self, hook: Box<Fn(u64, u64)>) -> Result<(), Error> {
+	fn add_block_hook_all(&mut self, hook: Arc<Fn(u64, u64)>) -> Result<(), Error> {
 		self.block_hooks.push( BlockHook {
 			range: HookRange::All,
 			hook: hook,
@@ -114,7 +122,7 @@ impl Cpu for SimpleMips32InterpreterCore {
 		Ok(())
 	}
 
-	fn add_code_hook_single(&mut self, base: u64, hook: Box<Fn(u64, u64)>) -> Result<(), Error> {
+	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Fn(u64, u64)>) -> Result<(), Error> {
 		self.code_hooks.push( CodeHook {
 			base: base,
 			hook: hook,
