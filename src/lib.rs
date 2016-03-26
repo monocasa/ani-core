@@ -60,14 +60,12 @@ pub enum Error {
 	SetRegUnknownReg(CpuReg, u64),
 }
 
-#[allow(dead_code)]
 pub struct System {
 	fsb: mem::MemMap,
 	cpus: BTreeMap<usize, Box<Cpu>>,
 	next_cpu_handle: usize,
 }
 
-#[allow(dead_code)]
 pub struct CpuCookie {
 	handle: usize,
 }
