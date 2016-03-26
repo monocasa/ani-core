@@ -5,6 +5,7 @@
 extern crate bitflags;
 
 pub mod iisa;
+pub mod mem;
 pub mod mips;
 
 bitflags! {
@@ -40,7 +41,10 @@ pub enum CpuReg {
 
 #[derive(Debug)]
 pub enum Error {
-	Unimplemented,
+	Unimplemented(&'static str),
+
+	MemAllocation,
+	UnableToFindRange,
 
 	InvalidCpuCookie,
 
@@ -69,6 +73,7 @@ struct MemSlot {
 
 #[allow(dead_code)]
 pub struct System {
+	fsb: mem::MemMap,
 	mem_slots: Vec<MemSlot>,
 	cpus: Vec<Box<Cpu>>,
 }
@@ -85,55 +90,48 @@ pub enum Arch {
 impl System {
 	pub fn new() -> System {
 		System {
+			fsb: Default::default(),
 			mem_slots: Vec::new(),
 			cpus: Vec::new(),
 		}
 	}
 
-	pub fn add_mappable_region(&mut self, prot: MemProt, base: u64, size: u64) -> Result<(), Error> {
-		self.mem_slots.push(MemSlot {
-			base: base,
-			size: size,
-			slot_type: MemSlotType::Mem,
-			prot: prot,
-		});
-
-		Ok(())
+	pub fn add_mappable_range(&mut self, prot: MemProt, base: u64, size: u64) -> Result<(), Error> {
+		self.fsb.add_mappable_range(base, size, prot)
 	}
 
 	#[allow(unused_variables)]
 	pub fn register_cpu(&mut self, opts: CpuOpt, arch: Arch) -> Result<CpuCookie, Error> {
-		Ok(CpuCookie{handle: 0})
+		Err(Error::Unimplemented("register_cpu"))
 	}
 
 	#[allow(unused_variables)]
 	pub fn set_cpu_reg(&mut self, cpu_cookie: &CpuCookie, reg: CpuReg, value: u64) -> Result<(), Error> {
-		Err(Error::Unimplemented)
+		Err(Error::Unimplemented("set_cpu_reg"))
 	}
 
 	#[allow(unused_variables)]
 	pub fn add_block_hook_all(&mut self, hook: Box<Fn(u64, u64)>) -> Result<(), Error> {
-		Err(Error::Unimplemented)
+		Err(Error::Unimplemented("add_block_hook_all"))
 	}
 
 	#[allow(unused_variables)]
 	pub fn add_code_hook_single(&mut self, base: u64, hook: Box<Fn(u64, u64)>) -> Result<(), Error> {
-		Err(Error::Unimplemented)
+		Err(Error::Unimplemented("add_code_hook_single"))
 	}
 
 	#[allow(unused_variables)]
 	pub fn execute_cpu_range(&mut self, cpu_cookie: &CpuCookie, base: u64, end: u64) -> Result<ExitReason, Error> {
-		Err(Error::Unimplemented)
+		Err(Error::Unimplemented("execute_cpu_range"))
 	}
 
 	#[allow(unused_variables)]
 	pub fn get_cpu_reg(&mut self, cpu_cookie: &CpuCookie, reg: CpuReg) -> Result<u64, Error> {
-		Err(Error::Unimplemented)
+		Err(Error::Unimplemented("get_cpu_reg"))
 	}
 
-	#[allow(unused_variables)]
-	pub fn write_range(&mut self, incoming: &[u8], base_addr: u64) -> Result<(), Error> {
-		Ok(())
+	pub fn set_range(&mut self, incoming: &[u8], base_addr: u64) -> Result<(), Error> {
+		self.fsb.set_range(incoming, base_addr)
 	}
 }
 

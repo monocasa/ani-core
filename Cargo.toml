@@ -5,6 +5,7 @@ authors = ["monocasa"]
 
 [dependencies]
 bitflags = "0.4.0"
+libc = "0.2.7"
 
 [dependencies.opcode]
 git = "https://github.com/monocasa/opcode.git"
