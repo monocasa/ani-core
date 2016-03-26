@@ -58,23 +58,8 @@ pub enum Error {
 }
 
 #[allow(dead_code)]
-enum MemSlotType {
-	Mem,
-	Mmio,
-}
-
-#[allow(dead_code)]
-struct MemSlot {
-	base: u64,
-	size: u64,
-	slot_type: MemSlotType,
-	prot: MemProt,
-}
-
-#[allow(dead_code)]
 pub struct System {
 	fsb: mem::MemMap,
-	mem_slots: Vec<MemSlot>,
 	cpus: Vec<Box<Cpu>>,
 }
 
@@ -91,7 +76,6 @@ impl System {
 	pub fn new() -> System {
 		System {
 			fsb: Default::default(),
-			mem_slots: Vec::new(),
 			cpus: Vec::new(),
 		}
 	}
