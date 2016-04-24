@@ -6,11 +6,11 @@ use std::io;
 
 extern crate opcode;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 #[allow(dead_code)]
 pub struct MipsTranslator {
-	arch: Arch,
-	big_endian: bool,
+	pub arch: Arch,
+	pub big_endian: bool,
 }
 
 #[derive(PartialEq)]

@@ -1,14 +1,17 @@
 use super::{Cpu,
+            CPU_ENDIAN_BIG,
             CpuOpt,
             CpuReg,
             Error,
             ExitReason};
 
+use super::iisa;
+
 use std::sync::Arc;
 
 pub mod translate;
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Arch {
 	R2000,
 	Sys161,
@@ -56,9 +59,10 @@ impl SimpleMips32InterpreterCore {
 	}
 }
 
-#[allow(unused_variables)]
-pub fn mips_cpu_factory(opts: CpuOpt, arch: Arch) -> Box<Cpu> {
-	Box::<SimpleMips32InterpreterCore>::new(SimpleMips32InterpreterCore::new())
+pub fn mips_cpu_factory(opts: CpuOpt, arch: Arch) -> Result<Box<Cpu>, Error> {
+	let translator = translate::MipsTranslator{ arch: arch, big_endian: (opts & CPU_ENDIAN_BIG) == CPU_ENDIAN_BIG };
+
+	iisa::executor::executor(translator)
 }
 
 impl Cpu for SimpleMips32InterpreterCore {
@@ -129,6 +133,9 @@ impl Cpu for SimpleMips32InterpreterCore {
 		});
 
 		Ok(())
+	}
+
+	fn shutdown(&mut self) {
 	}
 }
 

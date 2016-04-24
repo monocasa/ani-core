@@ -1,5 +1,3 @@
-#![feature(const_fn)]
-
 #![cfg_attr(feature = "assignment_operators", feature(augmented_assignments, op_assign_traits))]
 #[macro_use]
 extern crate bitflags;
@@ -77,7 +75,7 @@ pub enum Arch {
 fn create_cpu(opts: CpuOpt, arch: Arch) -> Result<Box<Cpu>, Error> {
 	match arch {
 		Arch::Mips(mips_info) => {
-			Ok(mips::mips_cpu_factory(opts, mips_info))
+			mips::mips_cpu_factory(opts, mips_info)
 		},
 	}
 }
@@ -151,6 +149,14 @@ impl System {
 	}
 }
 
+impl Drop for System {
+	fn drop(&mut self) {
+		for(_, cpu) in self.cpus.iter_mut() {
+			cpu.shutdown();
+		}
+	}
+}
+
 pub trait Cpu {
 	fn execute_range(&mut self, base: u64, end: u64) -> Result<ExitReason, Error>;
 
@@ -160,5 +166,7 @@ pub trait Cpu {
 
 	fn add_block_hook_all(&mut self, hook: Arc<Fn(u64, u64)>) -> Result<(), Error>;
 	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Fn(u64, u64)>) -> Result<(), Error>;
+
+	fn shutdown(&mut self);
 }
 
