@@ -59,7 +59,7 @@ pub enum Error {
 }
 
 pub struct System {
-	fsb: mem::MemMap,
+	fsb: mem::BusMatrix,
 	cpus: BTreeMap<usize, Box<Cpu>>,
 	next_cpu_handle: usize,
 }
