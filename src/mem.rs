@@ -4,7 +4,7 @@ use super::{MemProt, Error, PROT_READ};
 
 use std::mem;
 use std::ptr;
-use std::sync;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ReadResult<T> {
@@ -33,7 +33,7 @@ pub trait BusSlave {
 
 pub enum MemRangeImpl {
 	Mappable(*mut u8, MemProt),
-	Mmio(sync::Mutex<Box<BusSlave>>),
+	Mmio(Arc<Mutex<BusSlave + Send>>),
 }
 
 pub struct MemRange {
@@ -68,7 +68,7 @@ impl BusMatrix {
 		Ok(())
 	}
 
-	pub fn add_bus_slave(&mut self, base: u64, size: u64, slave: sync::Mutex<Box<BusSlave>>) -> Result<(), Error> {
+	pub fn add_bus_slave(&mut self, base: u64, size: u64, slave: Arc<Mutex<BusSlave + Send>>) -> Result<(), Error> {
 		self.ranges.push(MemRange{base: base, size: size, backing: MemRangeImpl::Mmio(slave)});
 
 		Ok(())
@@ -379,7 +379,7 @@ impl BusSlave for BusMatrix {
 mod tests {
 	use super::{BusMatrix, BusSlave, ReadResult, WriteResult};
 
-	use std::sync;
+	use std::sync::{Arc, Mutex};
 
 	#[derive(Debug, Eq, PartialEq)]
 	enum BusAccess {
@@ -459,15 +459,17 @@ mod tests {
 	fn simple_dispatch() {
 		let mut map: BusMatrix = Default::default();
 
-		let boxed_slave: Box<BusSlave> = Box::new(TestBusSlave::new());
+		let slave = Arc::new(Mutex::new(TestBusSlave::new()));
 
-		let bus_slave = sync::Mutex::new(boxed_slave);
-
-		map.add_bus_slave(0x1000, 0x200, bus_slave).unwrap();
+		map.add_bus_slave(0x1000, 0x200, slave.clone()).unwrap();
 
 		assert_eq!(ReadResult::Success(1), map.read_u8(0x1000));
 		assert_eq!(ReadResult::Success(2), map.read_u8(0x1000));
 		assert_eq!(ReadResult::BusError, map.read_u8(0x1200));
+
+		let accesses = vec![BusAccess::ReadU8(0), BusAccess::ReadU8(0)];
+
+		assert_eq!(accesses, slave.lock().unwrap().accesses);
 	}
 }
 
