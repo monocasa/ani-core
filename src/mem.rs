@@ -31,20 +31,29 @@ pub trait BusSlave {
 	fn write_u64(&mut self, addr: u64, data: u64) -> WriteResult;
 }
 
+#[derive(Clone)]
 pub enum MemRangeImpl {
 	Mappable(*mut u8, MemProt),
 	Mmio(Arc<Mutex<BusSlave + Send>>),
 }
 
+unsafe impl Send for MemRangeImpl { }
+
+#[derive(Clone)]
 pub struct MemRange {
 	base: u64,
 	size: u64,
 	backing: MemRangeImpl,
 }
 
+pub enum BusMatrixUpdateOp {
+	Add(MemRange),
+}
+
 #[derive(Default)]
 pub struct BusMatrix {
 	ranges: Vec<MemRange>,
+	update_fns: Vec<Box<FnMut(BusMatrixUpdateOp)>>,
 }
 
 impl BusMatrix {
@@ -72,6 +81,14 @@ impl BusMatrix {
 		self.ranges.push(MemRange{base: base, size: size, backing: MemRangeImpl::Mmio(slave)});
 
 		Ok(())
+	}
+
+	pub fn apply_update_op(&mut self, op: BusMatrixUpdateOp) {
+		match op {
+			BusMatrixUpdateOp::Add(range) => {
+				self.ranges.push(range);
+			},
+		}
 	}
 
 	fn find_range(&self, base: u64, len: usize) -> Result<*mut u8, Error> {
@@ -102,6 +119,14 @@ impl BusMatrix {
 		}
 
 		Ok(())
+	}
+
+	pub fn add_child_matrix(&mut self, mut update_fn: Box<FnMut(BusMatrixUpdateOp)>) {
+		for range in self.ranges.iter() {
+			update_fn(BusMatrixUpdateOp::Add(range.clone()));
+		}
+
+		self.update_fns.push(update_fn)
 	}
 }
 
@@ -377,9 +402,12 @@ impl BusSlave for BusMatrix {
 
 #[cfg(test)]
 mod tests {
-	use super::{BusMatrix, BusSlave, ReadResult, WriteResult};
+	use super::{BusMatrix, BusMatrixUpdateOp, BusSlave, ReadResult, WriteResult};
 
 	use std::sync::{Arc, Mutex};
+
+	use std::sync::mpsc;
+	use std::thread;
 
 	#[derive(Debug, Eq, PartialEq)]
 	enum BusAccess {
@@ -470,6 +498,37 @@ mod tests {
 		let accesses = vec![BusAccess::ReadU8(0), BusAccess::ReadU8(0)];
 
 		assert_eq!(accesses, slave.lock().unwrap().accesses);
+	}
+
+	#[test]
+	fn update_add() {
+		let mut matrix: BusMatrix = Default::default();
+
+		let slave = Arc::new(Mutex::new(TestBusSlave::new()));
+
+		matrix.add_bus_slave(0x1000, 0x200, slave.clone()).unwrap();
+
+		let (tx, rx) = mpsc::channel::<BusMatrixUpdateOp>();
+
+		matrix.add_child_matrix(Box::new(move |update_op| {
+			tx.send(update_op).unwrap();
+		}));
+
+		let execution_thread = thread::spawn(move || {
+			let mut child_matrix: BusMatrix = Default::default();
+
+			let update_op = rx.recv().unwrap();
+
+			child_matrix.apply_update_op(update_op);
+
+			assert_eq!(ReadResult::Success(1), child_matrix.read_u8(0x1000));
+			assert_eq!(ReadResult::Success(2), child_matrix.read_u8(0x1001));
+		});
+
+		execution_thread.join().unwrap();
+
+		assert_eq!(vec![BusAccess::ReadU8(0), BusAccess::ReadU8(1)],
+		           slave.lock().unwrap().accesses);
 	}
 }
 
