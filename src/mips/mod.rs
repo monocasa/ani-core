@@ -6,6 +6,7 @@ use super::{Cpu,
             ExitReason};
 
 use super::iisa;
+use super::mem;
 
 use std::sync::Arc;
 
@@ -59,10 +60,10 @@ impl SimpleMips32InterpreterCore {
 	}
 }
 
-pub fn mips_cpu_factory(opts: CpuOpt, arch: Arch) -> Result<Box<Cpu>, Error> {
+pub fn mips_cpu_factory(opts: CpuOpt, arch: Arch, fsb: &mut mem::BusMatrix) -> Result<Box<Cpu>, Error> {
 	let translator = translate::MipsTranslator{ arch: arch, big_endian: (opts & CPU_ENDIAN_BIG) == CPU_ENDIAN_BIG };
 
-	iisa::executor::executor(translator)
+	iisa::executor::executor(translator, fsb)
 }
 
 impl Cpu for SimpleMips32InterpreterCore {

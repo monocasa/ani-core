@@ -1,11 +1,14 @@
 use super::super::*;
 
+use super::super::mem::{BusMatrix, BusMatrixUpdateOp};
+
 use std::sync::mpsc::*;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
 enum Message {
 	Shutdown(Arc<(Mutex<bool>, Condvar)>),
+	FsbUpdateOp(mem::BusMatrixUpdateOp),
 }
 
 struct FrontEnd {
@@ -65,6 +68,7 @@ impl Cpu for FrontEnd {
 struct Backend<T: Send> {
 	rx: Receiver<Message>,
 	translator: T,
+	fsb: mem::BusMatrix,
 }
 
 impl<T: Send> Backend<T> {
@@ -72,6 +76,7 @@ impl<T: Send> Backend<T> {
 		Backend {
 			rx:         rx,
 			translator: translator,
+			fsb:        Default::default(),
 		}
 	}
 
@@ -89,25 +94,33 @@ impl<T: Send> Backend<T> {
 
 			match msg {
 				Message::Shutdown(arc) => {
-					println!("Received shutdown message");
-
 					running = false;
 					let &(ref lock, ref cvar) = &*arc;
 					let mut started = lock.lock().unwrap();
 					*started = true;
 					cvar.notify_one();
 				},
+
+				Message::FsbUpdateOp(update_op) => {
+					self.fsb.apply_update_op(update_op);
+				},
 			}
 		}
 	}
 }
 
-pub fn executor<T: 'static+Send+Clone>(translator: T) -> Result<Box<Cpu>, Error> {
+pub fn executor<T: 'static+Send+Clone>(translator: T, fsb: &mut mem::BusMatrix) -> Result<Box<Cpu>, Error> {
 	let (tx, rx) = channel::<Message>();
 
-	let mut backend = Backend::new(rx, translator);
+	let mem_update_channel = tx.clone();
+
+	fsb.add_child_matrix(Box::new(move |update_op| {
+		mem_update_channel.send(Message::FsbUpdateOp(update_op)).unwrap();
+	}));
 
 	thread::spawn(move || {
+		let mut backend = Backend::new(rx, translator);
+
 		backend.execute();
 	});
 

@@ -72,10 +72,10 @@ pub enum Arch {
 	Mips(mips::Arch),
 }
 
-fn create_cpu(opts: CpuOpt, arch: Arch) -> Result<Box<Cpu>, Error> {
+fn create_cpu(opts: CpuOpt, arch: Arch, fsb: &mut mem::BusMatrix) -> Result<Box<Cpu>, Error> {
 	match arch {
 		Arch::Mips(mips_info) => {
-			mips::mips_cpu_factory(opts, mips_info)
+			mips::mips_cpu_factory(opts, mips_info, fsb)
 		},
 	}
 }
@@ -104,7 +104,7 @@ impl System {
 	}
 
 	pub fn register_cpu(&mut self, opts: CpuOpt, arch: Arch) -> Result<CpuCookie, Error> {
-		let cpu = try!(create_cpu(opts, arch));
+		let cpu = try!(create_cpu(opts, arch, &mut self.fsb));
 
 		Ok(self.register_cpu_no_throw(cpu))
 	}
