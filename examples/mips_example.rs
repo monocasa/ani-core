@@ -30,9 +30,8 @@ fn test_mips(test_name: &str, opt: ani_core::CpuOpt, code_buffer: &[u8]) -> Resu
 	))));
 
 	let expected_exit_pc = ROM_VIRT + (code_buffer.len() as u64);
-	let end_of_code = expected_exit_pc - 1;
 
-	let exit_reason = try!(system.execute_cpu_range(&cpu, ROM_VIRT, end_of_code));
+	let exit_reason = try!(system.execute_cpu_range(&cpu, ROM_VIRT, expected_exit_pc));
 
 	if exit_reason != ani_core::ExitReason::PcOutOfRange(expected_exit_pc) {
 		panic!("Unexpected exit reason:  {:?}", exit_reason);

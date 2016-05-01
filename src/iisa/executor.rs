@@ -40,6 +40,15 @@ impl RegisterFile {
 		self.bytes[reg_off + 3] = (value >> 24) as u8;
 	}
 
+	pub fn read_u32(&mut self, reg: u32) -> u32 {
+		let reg_off = (reg as usize) * 4;
+
+		((self.bytes[reg_off + 0] as u32) >>  0) |
+		((self.bytes[reg_off + 1] as u32) >>  8) |
+		((self.bytes[reg_off + 2] as u32) >> 16) |
+		((self.bytes[reg_off + 3] as u32) >> 24)
+	}
+
 	pub fn set_pc(&mut self, value: u64) {
 		self.pc = value
 	}
@@ -51,6 +60,7 @@ enum Message {
 	SetReg(CpuReg, u64),
 	AddBlockHookAll(BlockHook),
 	AddCodeHookSingle(CodeHook),
+	ExecuteRange(u64, u64),
 }
 
 struct FrontEnd {
@@ -70,9 +80,10 @@ pub trait Translator {
 }
 
 impl Cpu for FrontEnd {
-	#[allow(unused_variables)]
 	fn execute_range(&mut self, base: u64, end: u64) -> Result<ExitReason, Error> {
-		Err(Error::Unimplemented("iisa::executor::FrontEnd::execute_range"))
+		let _ = self.tx.send(Message::ExecuteRange(base, end));
+
+		Ok(ExitReason::PcOutOfRange(end))
 	}
 
 	#[allow(unused_variables)]
@@ -117,6 +128,12 @@ impl Cpu for FrontEnd {
 	}
 }
 
+#[derive(Debug, Eq, PartialEq)]
+enum ExecutionState {
+	Paused,
+	WhileInRange(u64, u64),
+}
+
 struct Backend<T: Send> {
 	rx: Receiver<Message>,
 	translator: T,
@@ -124,6 +141,7 @@ struct Backend<T: Send> {
 	registers: RegisterFile,
 	hooks_on_all: Vec<BlockHook>,
 	code_hooks_on_single: Vec<CodeHook>,
+	execution_state: ExecutionState,
 }
 
 impl<T: Send+Clone+Translator> Backend<T> {
@@ -135,44 +153,86 @@ impl<T: Send+Clone+Translator> Backend<T> {
 			registers:            RegisterFile::new(),
 			hooks_on_all:         Vec::new(),
 			code_hooks_on_single: Vec::new(),
+			execution_state:      ExecutionState::Paused,
 		}
+	}
+
+	fn process_message(&mut self, msg: Message) -> bool {
+		match msg {
+			Message::Shutdown(arc) => {
+				let &(ref lock, ref cvar) = &*arc;
+				let mut started = lock.lock().unwrap();
+				*started = true;
+				cvar.notify_one();
+
+				return false;
+			},
+
+			Message::FsbUpdateOp(update_op) => {
+				self.fsb.apply_update_op(update_op);
+			},
+
+			Message::SetReg(reg, value) => {
+				self.translator.set_reg(&mut self.registers, reg, value).unwrap();
+			},
+
+			Message::AddBlockHookAll(hook) => {
+				self.hooks_on_all.push(hook);
+			},
+
+			Message::AddCodeHookSingle(hook) => {
+				self.code_hooks_on_single.push(hook);
+			},
+
+			Message::ExecuteRange(base, end) => {
+				self.execution_state = ExecutionState::WhileInRange(base, end);
+			},
+		}
+
+		true
+	}
+
+	fn single_step(&mut self) {
+		let value = self.registers.read_u32(1);
+		self.registers.write_u32(1, value | 0x3456);
+		self.registers.pc += 4;
+
+		println!("Single step");
 	}
 
 	fn execute(&mut self) {
 		let mut running = true;
 
 		while running {
-			let msg = match self.rx.recv() {
-				Ok(msg) => msg,
-				Err(err) => {
-					println!("Exiting cpu thread because {:?}", err);
-					return;
-				},
-			};
+			running = match self.execution_state {
+				ExecutionState::Paused => {
+					let msg = match self.rx.recv() {
+						Ok(msg) => msg,
+						Err(err) => {
+							println!("Exiting cpu thread because {:?}", err);
+							return;
+						},
+					};
 
-			match msg {
-				Message::Shutdown(arc) => {
-					running = false;
-					let &(ref lock, ref cvar) = &*arc;
-					let mut started = lock.lock().unwrap();
-					*started = true;
-					cvar.notify_one();
+					self.process_message(msg)
 				},
 
-				Message::FsbUpdateOp(update_op) => {
-					self.fsb.apply_update_op(update_op);
-				},
+				ExecutionState::WhileInRange(base, end) => {
+					self.single_step();
 
-				Message::SetReg(reg, value) => {
-					self.translator.set_reg(&mut self.registers, reg, value).unwrap();
-				},
+					if self.registers.pc < base || self.registers.pc >= end {
+						self.execution_state = ExecutionState::Paused;
+					}
 
-				Message::AddBlockHookAll(hook) => {
-					self.hooks_on_all.push(hook);
-				},
+					let msg = match self.rx.try_recv() {
+						Ok(msg) => msg,
+						Err(err) => {
+							println!("Exiting cpu thread because {:?}", err);
+							return;
+						},
+					};
 
-				Message::AddCodeHookSingle(hook) => {
-					self.code_hooks_on_single.push(hook);
+					self.process_message(msg)
 				},
 			}
 		}
