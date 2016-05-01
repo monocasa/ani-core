@@ -114,7 +114,7 @@ impl Cpu for FrontEnd {
 
 	fn shutdown(&mut self) {
 		let mut promise = Promise::<()>::new();
-		let mut future = promise.get_future();
+		let future = promise.get_future();
 
 		let _ = self.tx.send(Message::Shutdown(promise));
 

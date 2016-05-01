@@ -80,7 +80,7 @@ pub struct Future<T> {
 }
 
 impl<T> Future<T> {
-	pub fn wait(&mut self) -> Result<T, Error> {
+	pub fn wait(self) -> Result<T, Error> {
 		match self.rx.recv() {
 			Ok(t) => t,
 			Err(_) => Err(Error::PromiseLost),
