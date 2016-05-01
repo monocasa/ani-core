@@ -58,8 +58,8 @@ enum Message {
 	Shutdown(Promise<()>),
 	FsbUpdateOp(mem::BusMatrixUpdateOp, Promise<()>),
 	SetReg(CpuReg, u64, Promise<()>),
-	AddBlockHookAll(BlockHook),
-	AddCodeHookSingle(CodeHook),
+	AddBlockHookAll(BlockHook, Promise<()>),
+	AddCodeHookSingle(CodeHook, Promise<()>),
 	ExecuteRange(u64, u64, Promise<ExitReason>),
 }
 
@@ -104,18 +104,24 @@ impl Cpu for FrontEnd {
 	}
 
 	fn add_block_hook_all(&mut self, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
-		let _ = self.tx.send(Message::AddBlockHookAll(BlockHook{hook: hook}));
+		let mut promise = Promise::<()>::new();
+		let future = promise.get_future();
 
-		Ok(())
+		let _ = self.tx.send(Message::AddBlockHookAll(BlockHook{hook: hook}, promise));
+
+		future.wait()
 	}
 
 	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
+		let mut promise = Promise::<()>::new();
+		let future = promise.get_future();
+
 		let _ = self.tx.send(Message::AddCodeHookSingle(CodeHook{
 			base: base,
 			hook: hook
-		}));
+		}, promise));
 
-		Ok(())
+		future.wait()
 	}
 
 	fn shutdown(&mut self) {
@@ -175,15 +181,19 @@ impl<T: Send+Clone+Translator> Backend<T> {
 				promise.signal(self.translator.set_reg(&mut self.registers, reg, value))
 			},
 
-			Message::AddBlockHookAll(hook) => {
+			Message::AddBlockHookAll(hook, mut promise) => {
 				self.hooks_on_all.push(hook);
+
+				promise.signal(Ok(()));
 			},
 
-			Message::AddCodeHookSingle(hook) => {
+			Message::AddCodeHookSingle(hook, mut promise) => {
 				self.code_hooks_on_single.push(hook);
+
+				promise.signal(Ok(()));
 			},
 
-			Message::ExecuteRange(base, end, mut promise) => {
+			Message::ExecuteRange(base, end, promise) => {
 				self.execution_state = ExecutionState::WhileInRange(base, end, promise);
 			},
 		}
