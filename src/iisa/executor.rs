@@ -21,7 +21,7 @@ unsafe impl Send for CodeHook { }
 
 pub struct RegisterFile {
 	bytes: [u8;4096],
-	pc: u64,
+	pub pc: u64,
 }
 
 impl RegisterFile {
@@ -47,14 +47,6 @@ impl RegisterFile {
 		((self.bytes[reg_off + 1] as u32) <<  8) |
 		((self.bytes[reg_off + 2] as u32) << 16) |
 		((self.bytes[reg_off + 3] as u32) << 24)
-	}
-
-	pub fn set_pc(&mut self, value: u64) {
-		self.pc = value
-	}
-
-	pub fn get_pc(&self) -> u64 {
-		self.pc
 	}
 }
 

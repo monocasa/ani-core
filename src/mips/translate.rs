@@ -169,7 +169,7 @@ impl iisa::executor::Translator for MipsTranslator {
 				},
 
 				CpuReg::Pc => {
-					register_file.set_pc(value);
+					register_file.pc = value;
 
 					Ok(())
 				},
@@ -191,7 +191,7 @@ impl iisa::executor::Translator for MipsTranslator {
 				},
 
 				CpuReg::Pc => {
-					Ok(register_file.get_pc())
+					Ok(register_file.pc)
 				},
 
 				_ => {
