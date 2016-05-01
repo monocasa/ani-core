@@ -60,7 +60,7 @@ enum Message {
 	SetReg(CpuReg, u64, Promise<()>),
 	AddBlockHookAll(BlockHook),
 	AddCodeHookSingle(CodeHook),
-	ExecuteRange(u64, u64),
+	ExecuteRange(u64, u64, Promise<ExitReason>),
 }
 
 struct FrontEnd {
@@ -81,9 +81,12 @@ pub trait Translator {
 
 impl Cpu for FrontEnd {
 	fn execute_range(&mut self, base: u64, end: u64) -> Result<ExitReason, Error> {
-		let _ = self.tx.send(Message::ExecuteRange(base, end));
+		let mut promise = Promise::new();
+		let future = promise.get_future();
 
-		Ok(ExitReason::PcOutOfRange(end))
+		let _ = self.tx.send(Message::ExecuteRange(base, end, promise));
+
+		future.wait()
 	}
 
 	#[allow(unused_variables)]
@@ -125,10 +128,10 @@ impl Cpu for FrontEnd {
 	}
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone)]
 enum ExecutionState {
 	Paused,
-	WhileInRange(u64, u64),
+	WhileInRange(u64, u64, Promise<ExitReason>),
 }
 
 struct Backend<T: Send> {
@@ -180,8 +183,8 @@ impl<T: Send+Clone+Translator> Backend<T> {
 				self.code_hooks_on_single.push(hook);
 			},
 
-			Message::ExecuteRange(base, end) => {
-				self.execution_state = ExecutionState::WhileInRange(base, end);
+			Message::ExecuteRange(base, end, mut promise) => {
+				self.execution_state = ExecutionState::WhileInRange(base, end, promise);
 			},
 		}
 
@@ -200,7 +203,8 @@ impl<T: Send+Clone+Translator> Backend<T> {
 		let mut running = true;
 
 		while running {
-			running = match self.execution_state {
+			let cur_state = self.execution_state.clone();
+			running = match cur_state {
 				ExecutionState::Paused => {
 					let msg = match self.rx.recv() {
 						Ok(msg) => msg,
@@ -213,17 +217,20 @@ impl<T: Send+Clone+Translator> Backend<T> {
 					self.process_message(msg)
 				},
 
-				ExecutionState::WhileInRange(base, end) => {
+				ExecutionState::WhileInRange(base, end, mut promise) => {
 					self.single_step();
 
 					if self.registers.pc < base || self.registers.pc >= end {
+						promise.signal(Ok(ExitReason::PcOutOfRange(self.registers.pc)));
 						self.execution_state = ExecutionState::Paused;
 					}
 
 					let msg = match self.rx.try_recv() {
 						Ok(msg) => msg,
-						Err(err) => {
-							println!("Exiting cpu thread because {:?}", err);
+						Err(TryRecvError::Empty) => {
+							continue;
+						},
+						Err(TryRecvError::Disconnected) => {
 							return;
 						},
 					};

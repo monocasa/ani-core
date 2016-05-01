@@ -30,7 +30,7 @@ bitflags! {
 	}
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ExitReason {
 	PcOutOfRange(u64),
 }
@@ -88,6 +88,7 @@ impl<T> Future<T> {
 	}
 }
 
+#[derive(Clone)]
 pub struct Promise<T: Clone> {
 	future_channels: Vec<mpsc::Sender<Result<T, Error>>>,
 }
