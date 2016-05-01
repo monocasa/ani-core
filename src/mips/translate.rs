@@ -156,8 +156,6 @@ impl MipsTranslator {
 
 impl iisa::executor::Translator for MipsTranslator {
 	fn set_reg(&mut self, register_file: &mut iisa::executor::RegisterFile, reg: CpuReg, value: u64) -> Result<(), Error> {
-		println!("Setting {:?} to {:#x}", reg, value);
-
 		if BaseIsa::Mips32 == isa_for_arch(&self.arch) {
 			if value >= 0x100000000 {
 				return Err(Error::SetRegValueOutOfRange(reg, value));

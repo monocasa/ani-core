@@ -219,8 +219,6 @@ impl<T: Send+Clone+Translator> Backend<T> {
 		let value = self.registers.read_u32(1);
 		self.registers.write_u32(1, value | 0x3456);
 		self.registers.pc += 4;
-
-		println!("Single stepped to {:#x}", self.registers.pc);
 	}
 
 	fn execute(&mut self) {
