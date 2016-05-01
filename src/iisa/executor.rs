@@ -56,7 +56,7 @@ impl RegisterFile {
 
 enum Message {
 	Shutdown(Promise<()>),
-	FsbUpdateOp(mem::BusMatrixUpdateOp),
+	FsbUpdateOp(mem::BusMatrixUpdateOp, Promise<()>),
 	SetReg(CpuReg, u64, Promise<()>),
 	AddBlockHookAll(BlockHook),
 	AddCodeHookSingle(CodeHook),
@@ -162,8 +162,10 @@ impl<T: Send+Clone+Translator> Backend<T> {
 				return false;
 			},
 
-			Message::FsbUpdateOp(update_op) => {
+			Message::FsbUpdateOp(update_op, mut promise) => {
 				self.fsb.apply_update_op(update_op);
+
+				promise.signal(Ok(()));
 			},
 
 			Message::SetReg(reg, value, mut promise) => {
@@ -238,15 +240,20 @@ pub fn executor<T: 'static+Send+Clone+Translator>(translator: T, fsb: &mut mem::
 
 	let mem_update_channel = tx.clone();
 
-	fsb.add_child_matrix(Box::new(move |update_op| {
-		mem_update_channel.send(Message::FsbUpdateOp(update_op)).unwrap();
-	}));
-
 	thread::spawn(move || {
 		let mut backend = Backend::new(rx, translator);
 
 		backend.execute();
 	});
+
+	fsb.add_child_matrix(Box::new(move |update_op| {
+		let mut promise = Promise::<()>::new();
+		let future = promise.get_future();
+
+		let _ = mem_update_channel.send(Message::FsbUpdateOp(update_op, promise));
+
+		let _ = future.wait();
+	}));
 
 	Ok(Box::new(FrontEnd::new(tx)))
 }
