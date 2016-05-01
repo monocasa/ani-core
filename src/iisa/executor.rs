@@ -1,7 +1,7 @@
 use super::super::*;
 
 use std::sync::mpsc::*;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 #[allow(dead_code)]
@@ -55,7 +55,7 @@ impl RegisterFile {
 }
 
 enum Message {
-	Shutdown(Arc<(Mutex<bool>, Condvar)>),
+	Shutdown(Promise<()>),
 	FsbUpdateOp(mem::BusMatrixUpdateOp),
 	SetReg(CpuReg, u64),
 	AddBlockHookAll(BlockHook),
@@ -113,18 +113,12 @@ impl Cpu for FrontEnd {
 	}
 
 	fn shutdown(&mut self) {
-		let remote_pair = Arc::new((Mutex::new(false), Condvar::new()));
-		let local_pair = remote_pair.clone();
+		let mut promise = Promise::<()>::new();
+		let mut future = promise.get_future();
 
-		let _ = self.tx.send(Message::Shutdown(remote_pair));
+		let _ = self.tx.send(Message::Shutdown(promise));
 
-		println!("Sent shutdown message");
-
-		let &(ref lock, ref cvar) = &*local_pair;
-		let mut shutdown = lock.lock().unwrap();
-		while !*shutdown {
-			shutdown = cvar.wait(shutdown).unwrap();
-		}
+		let _ = future.wait();
 	}
 }
 
@@ -157,13 +151,10 @@ impl<T: Send+Clone+Translator> Backend<T> {
 		}
 	}
 
-	fn process_message(&mut self, msg: Message) -> bool {
+	fn process_message(&mut self, mut msg: Message) -> bool {
 		match msg {
-			Message::Shutdown(arc) => {
-				let &(ref lock, ref cvar) = &*arc;
-				let mut started = lock.lock().unwrap();
-				*started = true;
-				cvar.notify_one();
+			Message::Shutdown(ref mut promise) => {
+				promise.signal(Ok(()));
 
 				return false;
 			},

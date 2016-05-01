@@ -8,6 +8,7 @@ pub mod mips;
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc;
 
 bitflags! {
 	flags MemProt: u8 {
@@ -34,13 +35,13 @@ pub enum ExitReason {
 	PcOutOfRange(u64),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum CpuReg {
 	Pc,
 	CpuSpecific(u32),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Error {
 	Unimplemented(&'static str),
 
@@ -56,6 +57,8 @@ pub enum Error {
 
 	SetRegValueOutOfRange(CpuReg, u64),
 	SetRegUnknownReg(CpuReg, u64),
+
+	PromiseLost,
 }
 
 pub struct System {
@@ -70,6 +73,47 @@ pub struct CpuCookie {
 
 pub enum Arch {
 	Mips(mips::Arch),
+}
+
+pub struct Future<T> {
+	rx: mpsc::Receiver<Result<T, Error>>,
+}
+
+impl<T> Future<T> {
+	pub fn wait(&mut self) -> Result<T, Error> {
+		match self.rx.recv() {
+			Ok(t) => t,
+			Err(_) => Err(Error::PromiseLost),
+		}
+	}
+}
+
+pub struct Promise<T: Clone> {
+	future_channels: Vec<mpsc::Sender<Result<T, Error>>>,
+}
+
+impl<T: Clone> Promise<T> {
+	fn new() -> Promise<T> {
+		Promise {
+			future_channels: Vec::new(),
+		}
+	}
+
+	fn signal(&mut self, result: Result<T, Error>) {
+		for future_channel in self.future_channels.iter() {
+			let _ = future_channel.send(result.clone());
+		}
+	}
+
+	fn get_future(&mut self) -> Future<T> {
+		let (tx, rx) = mpsc::channel();
+
+		self.future_channels.push(tx);
+
+		Future {
+			rx: rx,
+		}
+	}
 }
 
 fn create_cpu(opts: CpuOpt, arch: Arch, fsb: &mut mem::BusMatrix) -> Result<Box<Cpu>, Error> {
