@@ -184,6 +184,26 @@ impl iisa::executor::Translator for MipsTranslator {
 			Err(Error::SetRegUnknownReg(reg, value))
 		}
 	}
+
+	fn get_reg(&self, register_file: &iisa::executor::RegisterFile, reg: CpuReg) -> Result<u64, Error> {
+		if BaseIsa::Mips32 == isa_for_arch(&self.arch) {
+			match reg {
+				CpuReg::CpuSpecific(r) if r <= 31 => {
+					Ok(register_file.read_u32(r) as u64)
+				},
+
+				CpuReg::Pc => {
+					Ok(register_file.get_pc())
+				},
+
+				_ => {
+					Err(Error::GetRegUnknownReg(reg))
+				},
+			}
+		} else {
+			Err(Error::GetRegUnknownReg(reg))
+		}
+	}
 }
 
 #[cfg(test)]

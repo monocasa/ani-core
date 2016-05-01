@@ -40,17 +40,21 @@ impl RegisterFile {
 		self.bytes[reg_off + 3] = (value >> 24) as u8;
 	}
 
-	pub fn read_u32(&mut self, reg: u32) -> u32 {
+	pub fn read_u32(&self, reg: u32) -> u32 {
 		let reg_off = (reg as usize) * 4;
 
-		((self.bytes[reg_off + 0] as u32) >>  0) |
-		((self.bytes[reg_off + 1] as u32) >>  8) |
-		((self.bytes[reg_off + 2] as u32) >> 16) |
-		((self.bytes[reg_off + 3] as u32) >> 24)
+		((self.bytes[reg_off + 0] as u32) <<  0) |
+		((self.bytes[reg_off + 1] as u32) <<  8) |
+		((self.bytes[reg_off + 2] as u32) << 16) |
+		((self.bytes[reg_off + 3] as u32) << 24)
 	}
 
 	pub fn set_pc(&mut self, value: u64) {
 		self.pc = value
+	}
+
+	pub fn get_pc(&self) -> u64 {
+		self.pc
 	}
 }
 
@@ -58,6 +62,7 @@ enum Message {
 	Shutdown(Promise<()>),
 	FsbUpdateOp(mem::BusMatrixUpdateOp, Promise<()>),
 	SetReg(CpuReg, u64, Promise<()>),
+	GetReg(CpuReg, Promise<u64>),
 	AddBlockHookAll(BlockHook, Promise<()>),
 	AddCodeHookSingle(CodeHook, Promise<()>),
 	ExecuteRange(u64, u64, Promise<ExitReason>),
@@ -77,6 +82,7 @@ impl FrontEnd {
 
 pub trait Translator {
 	fn set_reg(&mut self, registers: &mut RegisterFile, reg: CpuReg, value: u64) -> Result<(), Error>;
+	fn get_reg(&self, registers: &RegisterFile, reg: CpuReg) -> Result<u64, Error>;
 }
 
 impl Cpu for FrontEnd {
@@ -89,9 +95,13 @@ impl Cpu for FrontEnd {
 		future.wait()
 	}
 
-	#[allow(unused_variables)]
 	fn get_reg(&self, reg: CpuReg) -> Result<u64, Error> {
-		Err(Error::Unimplemented("iisa::executor::FrontEnd::get_reg"))
+		let mut promise = Promise::<u64>::new();
+		let future = promise.get_future();
+
+		let _ = self.tx.send(Message::GetReg(reg, promise));
+
+		future.wait()
 	}
 
 	fn set_reg(&mut self, reg: CpuReg, value: u64) -> Result<(), Error> {
@@ -175,6 +185,10 @@ impl<T: Send+Clone+Translator> Backend<T> {
 				self.fsb.apply_update_op(update_op);
 
 				promise.signal(Ok(()));
+			},
+
+			Message::GetReg(reg, mut promise) => {
+				promise.signal(self.translator.get_reg(&self.registers, reg))
 			},
 
 			Message::SetReg(reg, value, mut promise) => {
