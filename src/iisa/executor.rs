@@ -4,6 +4,21 @@ use std::sync::mpsc::*;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
+#[allow(dead_code)]
+struct BlockHook {
+	hook: Arc<Mutex<Fn(u64, u64)>>,
+}
+
+unsafe impl Send for BlockHook { }
+
+#[allow(dead_code)]
+struct CodeHook {
+	base: u64,
+	hook: Arc<Mutex<Fn(u64, u64)>>,
+}
+
+unsafe impl Send for CodeHook { }
+
 pub struct RegisterFile {
 	bytes: [u8;4096],
 	pc: u64,
@@ -34,6 +49,8 @@ enum Message {
 	Shutdown(Arc<(Mutex<bool>, Condvar)>),
 	FsbUpdateOp(mem::BusMatrixUpdateOp),
 	SetReg(CpuReg, u64),
+	AddBlockHookAll(BlockHook),
+	AddCodeHookSingle(CodeHook),
 }
 
 struct FrontEnd {
@@ -69,14 +86,19 @@ impl Cpu for FrontEnd {
 		Ok(())
 	}
 
-	#[allow(unused_variables)]
-	fn add_block_hook_all(&mut self, hook: Arc<Fn(u64, u64)>) -> Result<(), Error> {
-		Err(Error::Unimplemented("iisa::executor::FrontEnd::add_block_hook_all"))
+	fn add_block_hook_all(&mut self, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
+		let _ = self.tx.send(Message::AddBlockHookAll(BlockHook{hook: hook}));
+
+		Ok(())
 	}
 
-	#[allow(unused_variables)]
-	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Fn(u64, u64)>) -> Result<(), Error> {
-		Err(Error::Unimplemented("iisa::executor::FrontEnd::add_code_hook_single"))
+	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
+		let _ = self.tx.send(Message::AddCodeHookSingle(CodeHook{
+			base: base,
+			hook: hook
+		}));
+
+		Ok(())
 	}
 
 	fn shutdown(&mut self) {
@@ -100,15 +122,19 @@ struct Backend<T: Send> {
 	translator: T,
 	fsb: mem::BusMatrix,
 	registers: RegisterFile,
+	hooks_on_all: Vec<BlockHook>,
+	code_hooks_on_single: Vec<CodeHook>,
 }
 
 impl<T: Send+Clone+Translator> Backend<T> {
 	fn new(rx: Receiver<Message>, translator: T) -> Backend<T> {
 		Backend {
-			rx:         rx,
-			translator: translator,
-			fsb:        Default::default(),
-			registers:  RegisterFile::new(),
+			rx:                   rx,
+			translator:           translator,
+			fsb:                  Default::default(),
+			registers:            RegisterFile::new(),
+			hooks_on_all:         Vec::new(),
+			code_hooks_on_single: Vec::new(),
 		}
 	}
 
@@ -139,6 +165,14 @@ impl<T: Send+Clone+Translator> Backend<T> {
 
 				Message::SetReg(reg, value) => {
 					self.translator.set_reg(&mut self.registers, reg, value).unwrap();
+				},
+
+				Message::AddBlockHookAll(hook) => {
+					self.hooks_on_all.push(hook);
+				},
+
+				Message::AddCodeHookSingle(hook) => {
+					self.code_hooks_on_single.push(hook);
 				},
 			}
 		}

@@ -7,7 +7,7 @@ pub mod mem;
 pub mod mips;
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 bitflags! {
 	flags MemProt: u8 {
@@ -120,7 +120,7 @@ impl System {
 		try!(self.get_cpu(cpu_cookie)).set_reg(reg, value)
 	}
 
-	pub fn add_block_hook_all(&mut self, hook: Arc<Fn(u64, u64)>) -> Result<(), Error> {
+	pub fn add_block_hook_all(&mut self, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
 		for (_, cpu) in self.cpus.iter_mut() {
 			try!(cpu.add_block_hook_all(hook.clone()));
 		}
@@ -128,7 +128,7 @@ impl System {
 		Ok(())
 	}
 
-	pub fn add_code_hook_single(&mut self, base: u64, hook: Arc<Fn(u64, u64)>) -> Result<(), Error> {
+	pub fn add_code_hook_single(&mut self, base: u64, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
 		for(_, cpu) in self.cpus.iter_mut() {
 			try!(cpu.add_code_hook_single(base, hook.clone()));
 		}
@@ -164,8 +164,8 @@ pub trait Cpu {
 
 	fn set_reg(&mut self, reg: CpuReg, value: u64) -> Result<(), Error>;
 
-	fn add_block_hook_all(&mut self, hook: Arc<Fn(u64, u64)>) -> Result<(), Error>;
-	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Fn(u64, u64)>) -> Result<(), Error>;
+	fn add_block_hook_all(&mut self, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error>;
+	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error>;
 
 	fn shutdown(&mut self);
 }

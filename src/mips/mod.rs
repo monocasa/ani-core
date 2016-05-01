@@ -8,7 +8,7 @@ use super::{Cpu,
 use super::iisa;
 use super::mem;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub mod translate;
 
@@ -35,13 +35,13 @@ enum HookRange {
 #[allow(dead_code)]
 struct BlockHook {
 	range: HookRange,
-	hook: Arc<Fn(u64, u64)>,
+	hook: Arc<Mutex<Fn(u64, u64)>>,
 }
 
 #[allow(dead_code)]
 struct CodeHook {
 	base: u64,
-	hook: Arc<Fn(u64, u64)>,
+	hook: Arc<Mutex<Fn(u64, u64)>>,
 }
 
 #[derive(Default)]
@@ -69,12 +69,9 @@ pub fn mips_cpu_factory(opts: CpuOpt, arch: Arch, fsb: &mut mem::BusMatrix) -> R
 impl Cpu for SimpleMips32InterpreterCore {
 	fn execute_range(&mut self, base: u64, end: u64) -> Result<ExitReason, Error> {
 		while ((self.pc as u64) >= base) && ((self.pc as u64) <= end) {
-			for block_hook in self.block_hooks.iter() {
-				(&block_hook.hook)(self.pc as u64, 4);
-			}
-			for code_hook in self.code_hooks.iter() {
-				(&code_hook.hook)(self.pc as u64, 4);
-			}
+			//for code_hook in self.code_hooks.iter() {
+			//	(&code_hook.hook)(self.pc as u64, 4);
+			//}
 			self.gprs[1] |= 0x3456;
 			self.pc += 4;
 		}
@@ -118,7 +115,7 @@ impl Cpu for SimpleMips32InterpreterCore {
 		Ok(())
 	}
 
-	fn add_block_hook_all(&mut self, hook: Arc<Fn(u64, u64)>) -> Result<(), Error> {
+	fn add_block_hook_all(&mut self, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
 		self.block_hooks.push( BlockHook {
 			range: HookRange::All,
 			hook: hook,
@@ -127,7 +124,7 @@ impl Cpu for SimpleMips32InterpreterCore {
 		Ok(())
 	}
 
-	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Fn(u64, u64)>) -> Result<(), Error> {
+	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
 		self.code_hooks.push( CodeHook {
 			base: base,
 			hook: hook,

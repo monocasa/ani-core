@@ -1,6 +1,6 @@
 extern crate ani_core;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 const ROM_BASE: u64 = 0x1FC00000;
 const ROM_SIZE: u64 = 256 * 1024;
@@ -21,13 +21,13 @@ fn test_mips(test_name: &str, opt: ani_core::CpuOpt, code_buffer: &[u8]) -> Resu
 
 	try!(system.set_cpu_reg(&cpu, ani_core::CpuReg::Pc, ROM_VIRT));
 
-	try!(system.add_block_hook_all(Arc::new(|address, size|
+	try!(system.add_block_hook_all(Arc::new(Mutex::new(|address, size|
 		println!(">>> Tracing basic block at {:#x}, block_size = {:#x}", address, size)
-	)));
+	))));
 
-	try!(system.add_code_hook_single(ROM_BASE, Arc::new(|address, size|
+	try!(system.add_code_hook_single(ROM_BASE, Arc::new(Mutex::new(|address, size|
 		println!(">>> Tracing instruction at {:#x}, instruction size = {:#x}", address, size)
-	)));
+	))));
 
 	let expected_exit_pc = ROM_VIRT + (code_buffer.len() as u64);
 	let end_of_code = expected_exit_pc - 1;
