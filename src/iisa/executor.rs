@@ -1,14 +1,39 @@
 use super::super::*;
 
-use super::super::mem::{BusMatrix, BusMatrixUpdateOp};
-
 use std::sync::mpsc::*;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
+pub struct RegisterFile {
+	bytes: [u8;4096],
+	pc: u64,
+}
+
+impl RegisterFile {
+	fn new() -> RegisterFile {
+		RegisterFile {
+			bytes: [0; 4096],
+			pc:    0,
+		}
+	}
+
+	pub fn write_u32(&mut self, reg: u32, value: u32) {
+		let reg_off: usize = (reg as usize) * 4;
+		self.bytes[reg_off + 0] = (value >>  0) as u8;
+		self.bytes[reg_off + 1] = (value >>  8) as u8;
+		self.bytes[reg_off + 2] = (value >> 16) as u8;
+		self.bytes[reg_off + 3] = (value >> 24) as u8;
+	}
+
+	pub fn set_pc(&mut self, value: u64) {
+		self.pc = value
+	}
+}
+
 enum Message {
 	Shutdown(Arc<(Mutex<bool>, Condvar)>),
 	FsbUpdateOp(mem::BusMatrixUpdateOp),
+	SetReg(CpuReg, u64),
 }
 
 struct FrontEnd {
@@ -23,6 +48,10 @@ impl FrontEnd {
 	}
 }
 
+pub trait Translator {
+	fn set_reg(&mut self, registers: &mut RegisterFile, reg: CpuReg, value: u64) -> Result<(), Error>;
+}
+
 impl Cpu for FrontEnd {
 	#[allow(unused_variables)]
 	fn execute_range(&mut self, base: u64, end: u64) -> Result<ExitReason, Error> {
@@ -34,9 +63,10 @@ impl Cpu for FrontEnd {
 		Err(Error::Unimplemented("iisa::executor::FrontEnd::get_reg"))
 	}
 
-	#[allow(unused_variables)]
 	fn set_reg(&mut self, reg: CpuReg, value: u64) -> Result<(), Error> {
-		Err(Error::Unimplemented("iisa::executor::FrontEnd::set_reg"))
+		let _ = self.tx.send(Message::SetReg(reg, value));
+
+		Ok(())
 	}
 
 	#[allow(unused_variables)]
@@ -69,14 +99,16 @@ struct Backend<T: Send> {
 	rx: Receiver<Message>,
 	translator: T,
 	fsb: mem::BusMatrix,
+	registers: RegisterFile,
 }
 
-impl<T: Send> Backend<T> {
+impl<T: Send+Clone+Translator> Backend<T> {
 	fn new(rx: Receiver<Message>, translator: T) -> Backend<T> {
 		Backend {
 			rx:         rx,
 			translator: translator,
 			fsb:        Default::default(),
+			registers:  RegisterFile::new(),
 		}
 	}
 
@@ -104,12 +136,16 @@ impl<T: Send> Backend<T> {
 				Message::FsbUpdateOp(update_op) => {
 					self.fsb.apply_update_op(update_op);
 				},
+
+				Message::SetReg(reg, value) => {
+					self.translator.set_reg(&mut self.registers, reg, value).unwrap();
+				},
 			}
 		}
 	}
 }
 
-pub fn executor<T: 'static+Send+Clone>(translator: T, fsb: &mut mem::BusMatrix) -> Result<Box<Cpu>, Error> {
+pub fn executor<T: 'static+Send+Clone+Translator>(translator: T, fsb: &mut mem::BusMatrix) -> Result<Box<Cpu>, Error> {
 	let (tx, rx) = channel::<Message>();
 
 	let mem_update_channel = tx.clone();

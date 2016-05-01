@@ -2,6 +2,8 @@ use super::Arch;
 
 use super::super::iisa;
 
+use super::super::{CpuReg, Error};
+
 use std::io;
 
 extern crate opcode;
@@ -148,6 +150,38 @@ impl MipsTranslator {
 		match isa_for_arch(&self.arch) {
 			BaseIsa::Mips32 => decode_mips32(&self.arch, base, buffer, self.big_endian, false),
 			BaseIsa::Mips64 => decode_mips64(&self.arch, base, buffer),
+		}
+	}
+}
+
+impl iisa::executor::Translator for MipsTranslator {
+	fn set_reg(&mut self, register_file: &mut iisa::executor::RegisterFile, reg: CpuReg, value: u64) -> Result<(), Error> {
+		println!("Setting {:?} to {:#x}", reg, value);
+
+		if BaseIsa::Mips32 == isa_for_arch(&self.arch) {
+			if value >= 0x100000000 {
+				return Err(Error::SetRegValueOutOfRange(reg, value));
+			}
+
+			match reg {
+				CpuReg::CpuSpecific(r) if r <= 31 => {
+					register_file.write_u32(r, value as u32);
+
+					Ok(())
+				},
+
+				CpuReg::Pc => {
+					register_file.set_pc(value);
+
+					Ok(())
+				},
+
+				_ => {
+					Err(Error::SetRegUnknownReg(reg, value))
+				},
+			}
+		} else {
+			Err(Error::SetRegUnknownReg(reg, value))
 		}
 	}
 }
