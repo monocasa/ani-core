@@ -57,7 +57,7 @@ impl RegisterFile {
 enum Message {
 	Shutdown(Promise<()>),
 	FsbUpdateOp(mem::BusMatrixUpdateOp),
-	SetReg(CpuReg, u64),
+	SetReg(CpuReg, u64, Promise<()>),
 	AddBlockHookAll(BlockHook),
 	AddCodeHookSingle(CodeHook),
 	ExecuteRange(u64, u64),
@@ -92,9 +92,12 @@ impl Cpu for FrontEnd {
 	}
 
 	fn set_reg(&mut self, reg: CpuReg, value: u64) -> Result<(), Error> {
-		let _ = self.tx.send(Message::SetReg(reg, value));
+		let mut promise = Promise::<()>::new();
+		let future = promise.get_future();
 
-		Ok(())
+		let _ = self.tx.send(Message::SetReg(reg, value, promise));
+
+		future.wait()
 	}
 
 	fn add_block_hook_all(&mut self, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
@@ -151,9 +154,9 @@ impl<T: Send+Clone+Translator> Backend<T> {
 		}
 	}
 
-	fn process_message(&mut self, mut msg: Message) -> bool {
+	fn process_message(&mut self, msg: Message) -> bool {
 		match msg {
-			Message::Shutdown(ref mut promise) => {
+			Message::Shutdown(mut promise) => {
 				promise.signal(Ok(()));
 
 				return false;
@@ -163,8 +166,8 @@ impl<T: Send+Clone+Translator> Backend<T> {
 				self.fsb.apply_update_op(update_op);
 			},
 
-			Message::SetReg(reg, value) => {
-				self.translator.set_reg(&mut self.registers, reg, value).unwrap();
+			Message::SetReg(reg, value, mut promise) => {
+				promise.signal(self.translator.set_reg(&mut self.registers, reg, value))
 			},
 
 			Message::AddBlockHookAll(hook) => {
