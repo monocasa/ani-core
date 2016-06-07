@@ -23,9 +23,10 @@ enum BaseIsa {
 
 fn isa_for_arch(arch: &Arch) -> BaseIsa {
 	match *arch {
-		Arch::R2000  => BaseIsa::Mips32,
-		Arch::Sys161 => BaseIsa::Mips32,
-		Arch::VR4300 => BaseIsa::Mips64,
+		Arch::R2000   => BaseIsa::Mips32,
+		Arch::Sys161  => BaseIsa::Mips32,
+		Arch::VR4300  => BaseIsa::Mips64,
+		Arch::Mips4Kc => BaseIsa::Mips32,
 	}
 }
 

@@ -17,6 +17,7 @@ pub enum Arch {
 	R2000,
 	Sys161,
 	VR4300,
+	Mips4Kc,
 }
 
 impl Default for Arch {
