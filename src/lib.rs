@@ -32,7 +32,7 @@ bitflags! {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ExitReason {
-	PcOutOfRange(u64),
+	CodeHookSignalledStop
 }
 
 #[derive(Clone, Debug)]
@@ -73,6 +73,11 @@ pub struct CpuCookie {
 
 pub enum Arch {
 	Mips(mips::Arch),
+}
+
+pub enum TraceExitHint {
+	ContinueExecution,
+	StopExecution
 }
 
 pub struct Future<T> {
@@ -165,7 +170,7 @@ impl System {
 		try!(self.get_cpu(cpu_cookie)).set_reg(reg, value)
 	}
 
-	pub fn add_block_hook_all(&mut self, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
+	pub fn add_block_hook_all(&mut self, hook: Arc<Mutex<Fn(u64, u64) -> TraceExitHint>>) -> Result<(), Error> {
 		for (_, cpu) in self.cpus.iter_mut() {
 			try!(cpu.add_block_hook_all(hook.clone()));
 		}
@@ -173,7 +178,7 @@ impl System {
 		Ok(())
 	}
 
-	pub fn add_code_hook_single(&mut self, base: u64, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
+	pub fn add_code_hook_single(&mut self, base: u64, hook: Arc<Mutex<Fn(u64, u64) -> TraceExitHint>>) -> Result<(), Error> {
 		for(_, cpu) in self.cpus.iter_mut() {
 			try!(cpu.add_code_hook_single(base, hook.clone()));
 		}
@@ -181,8 +186,8 @@ impl System {
 		Ok(())
 	}
 
-	pub fn execute_cpu_range(&mut self, cpu_cookie: &CpuCookie, base: u64, end: u64) -> Result<ExitReason, Error> {
-		try!(self.get_cpu(cpu_cookie)).execute_range(base, end)
+	pub fn execute(&mut self, cpu_cookie: &CpuCookie) -> Result<ExitReason, Error> {
+		try!(self.get_cpu(cpu_cookie)).execute()
 	}
 
 	pub fn get_cpu_reg(&mut self, cpu_cookie: &CpuCookie, reg: CpuReg) -> Result<u64, Error> {
@@ -203,14 +208,14 @@ impl Drop for System {
 }
 
 pub trait Cpu {
-	fn execute_range(&mut self, base: u64, end: u64) -> Result<ExitReason, Error>;
+	fn execute(&mut self) -> Result<ExitReason, Error>;
 
 	fn get_reg(&self, reg: CpuReg) -> Result<u64, Error>;
 
 	fn set_reg(&mut self, reg: CpuReg, value: u64) -> Result<(), Error>;
 
-	fn add_block_hook_all(&mut self, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error>;
-	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error>;
+	fn add_block_hook_all(&mut self, hook: Arc<Mutex<Fn(u64, u64) -> TraceExitHint>>) -> Result<(), Error>;
+	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Mutex<Fn(u64, u64) -> TraceExitHint>>) -> Result<(), Error>;
 
 	fn shutdown(&mut self);
 }

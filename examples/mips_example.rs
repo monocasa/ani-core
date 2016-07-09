@@ -21,20 +21,30 @@ fn test_mips(test_name: &str, opt: ani_core::CpuOpt, code_buffer: &[u8]) -> Resu
 
 	try!(system.set_cpu_reg(&cpu, ani_core::CpuReg::Pc, ROM_VIRT));
 
-	try!(system.add_block_hook_all(Arc::new(Mutex::new(|address, size|
-		println!(">>> Tracing basic block at {:#x}, block_size = {:#x}", address, size)
-	))));
+	try!(system.add_block_hook_all(Arc::new(Mutex::new(|address, size| {
+		println!(">>> Tracing basic block at {:#x}, block_size = {:#x}", address, size);
 
-	try!(system.add_code_hook_single(ROM_BASE, Arc::new(Mutex::new(|address, size|
-		println!(">>> Tracing instruction at {:#x}, instruction size = {:#x}", address, size)
-	))));
+		ani_core::TraceExitHint::ContinueExecution
+	}))));
+
+	try!(system.add_code_hook_single(ROM_BASE, Arc::new(Mutex::new(|address, size| {
+		println!(">>> Tracing instruction at {:#x}, instruction size = {:#x}", address, size);
+
+		ani_core::TraceExitHint::StopExecution
+	}))));
 
 	let expected_exit_pc = ROM_VIRT + (code_buffer.len() as u64);
 
-	let exit_reason = try!(system.execute_cpu_range(&cpu, ROM_VIRT, expected_exit_pc));
+	let exit_reason = try!(system.execute(&cpu));
 
-	if exit_reason != ani_core::ExitReason::PcOutOfRange(expected_exit_pc) {
+	if exit_reason != ani_core::ExitReason::CodeHookSignalledStop {
 		panic!("Unexpected exit reason:  {:?}", exit_reason);
+	}
+
+	let exit_pc = try!(system.get_cpu_reg(&cpu, ani_core::CpuReg::Pc));
+
+	if exit_pc != expected_exit_pc {
+		panic!("Unexpected exit PC:  {:#08x}", exit_pc);
 	}
 
 	println!(">>> Emulation done. Below is the CPU context");

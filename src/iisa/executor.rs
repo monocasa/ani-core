@@ -6,7 +6,7 @@ use std::thread;
 
 #[allow(dead_code)]
 struct BlockHook {
-	hook: Arc<Mutex<Fn(u64, u64)>>,
+	hook: Arc<Mutex<Fn(u64, u64) -> TraceExitHint>>,
 }
 
 unsafe impl Send for BlockHook { }
@@ -14,7 +14,7 @@ unsafe impl Send for BlockHook { }
 #[allow(dead_code)]
 struct CodeHook {
 	base: u64,
-	hook: Arc<Mutex<Fn(u64, u64)>>,
+	hook: Arc<Mutex<Fn(u64, u64) -> TraceExitHint>>,
 }
 
 unsafe impl Send for CodeHook { }
@@ -57,7 +57,7 @@ enum Message {
 	GetReg(CpuReg, Promise<u64>),
 	AddBlockHookAll(BlockHook, Promise<()>),
 	AddCodeHookSingle(CodeHook, Promise<()>),
-	ExecuteRange(u64, u64, Promise<ExitReason>),
+	Execute(Promise<ExitReason>),
 }
 
 struct FrontEnd {
@@ -78,11 +78,11 @@ pub trait Translator {
 }
 
 impl Cpu for FrontEnd {
-	fn execute_range(&mut self, base: u64, end: u64) -> Result<ExitReason, Error> {
+	fn execute(&mut self) -> Result<ExitReason, Error> {
 		let mut promise = Promise::new();
 		let future = promise.get_future();
 
-		let _ = self.tx.send(Message::ExecuteRange(base, end, promise));
+		let _ = self.tx.send(Message::Execute(promise));
 
 		future.wait()
 	}
@@ -105,7 +105,7 @@ impl Cpu for FrontEnd {
 		future.wait()
 	}
 
-	fn add_block_hook_all(&mut self, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
+	fn add_block_hook_all(&mut self, hook: Arc<Mutex<Fn(u64, u64) -> TraceExitHint>>) -> Result<(), Error> {
 		let mut promise = Promise::<()>::new();
 		let future = promise.get_future();
 
@@ -114,7 +114,7 @@ impl Cpu for FrontEnd {
 		future.wait()
 	}
 
-	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Mutex<Fn(u64, u64)>>) -> Result<(), Error> {
+	fn add_code_hook_single(&mut self, base: u64, hook: Arc<Mutex<Fn(u64, u64) -> TraceExitHint>>) -> Result<(), Error> {
 		let mut promise = Promise::<()>::new();
 		let future = promise.get_future();
 
@@ -139,7 +139,7 @@ impl Cpu for FrontEnd {
 #[derive(Clone)]
 enum ExecutionState {
 	Paused,
-	WhileInRange(u64, u64, Promise<ExitReason>),
+	Executing(Promise<ExitReason>),
 }
 
 struct Backend<T: Send> {
@@ -199,8 +199,8 @@ impl<T: Send+Clone+Translator> Backend<T> {
 				promise.signal(Ok(()));
 			},
 
-			Message::ExecuteRange(base, end, promise) => {
-				self.execution_state = ExecutionState::WhileInRange(base, end, promise);
+			Message::Execute(promise) => {
+				self.execution_state = ExecutionState::Executing(promise);
 			},
 		}
 
@@ -231,13 +231,11 @@ impl<T: Send+Clone+Translator> Backend<T> {
 					self.process_message(msg)
 				},
 
-				ExecutionState::WhileInRange(base, end, mut promise) => {
+				ExecutionState::Executing(mut promise) => {
 					self.single_step();
 
-					if self.registers.pc < base || self.registers.pc >= end {
-						promise.signal(Ok(ExitReason::PcOutOfRange(self.registers.pc)));
-						self.execution_state = ExecutionState::Paused;
-					}
+					promise.signal(Ok(ExitReason::CodeHookSignalledStop));
+					self.execution_state = ExecutionState::Paused;
 
 					let msg = match self.rx.try_recv() {
 						Ok(msg) => msg,
