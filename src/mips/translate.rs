@@ -304,13 +304,12 @@ mod tests {
 	test_simple_r2000!( r2000_lui____zero_0xabcd,      0x3c00abcdu32, Op::Ld(DstSrc{dst: R::Discard, src: Src::ImmU32(0xABCD0000)}) );
 	test_simple_r2000!( r2000_lui____gp___0x8072,      0x3c1c8072u32, Op::Ld(DstSrc{dst: R::W(28),   src: Src::ImmU32(0x80720000)}) );
 
-	test_simple_r2000!( r2000_ori____gp___gp_0x4354,   0x34214354u32, Op::Or(DstSrcSrc{dst: R::W(1), src: [Src::Reg(R::W(1)), Src::ImmU16(0x4354)]}) );
-
 	test_simple_r2000!( r2000_mfc0___t0___c0status,    0x40086000u32, Op::Ld(DstSrc{dst: R::W(8), src: Src::Reg(R::W(32 + 12))}) );
 
 	test_simple_r2000!( r2000_or_____t0___t0_at,       0x01014025u32, Op::Or(DstSrcSrc{dst: R::W(8), src: [Src::Reg(R::W(8)), Src::Reg(R::W(1))]}) );
 
 	test_simple_r2000!( r2000_ori____at___at_0x4354,   0x34214354u32, Op::Or(DstSrcSrc{dst: R::W(1), src: [Src::Reg(R::W(1)), Src::ImmU16(0x4354)]}) );
+	test_simple_r2000!( r2000_ori____gp___gp_0x4354,   0x34214354u32, Op::Or(DstSrcSrc{dst: R::W(1), src: [Src::Reg(R::W(1)), Src::ImmU16(0x4354)]}) );
 	test_simple_r2000!( r2000_ori____v0___v0_0xbabe,   0x3442babeu32, Op::Or(DstSrcSrc{dst: R::W(2), src: [Src::Reg(R::W(2)), Src::ImmU16(0xBABE)]}) );
 
 	test_simple_r2000!( r2000_sw_____zero_20_____sp,   0xafa00014u32, Op::Sw(SrcSrcSrc{src: [Src::ImmU32(0),     Src::ImmI16(  20), Src::Reg(R::W(29))]}) );
