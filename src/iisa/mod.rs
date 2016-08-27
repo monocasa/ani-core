@@ -1,5 +1,8 @@
 pub mod executor;
 
+use super::CpuReg;
+use super::Error;
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum R {
 	Ip,
@@ -128,5 +131,61 @@ pub fn is_end_of_block(op: &Op) -> bool {
 
 		_ => false,
 	}
+}
+
+fn interpret_op_list(instrs: &Vec<Instr>, regs: &mut RegisterFile) -> Result<(), Error> {
+	for ref instr in instrs.iter() {
+		match instr.op {
+
+			//or_w_w_immu16
+			Op::Or(DstSrcSrc { dst: R::W(dst_reg), src: [Src::Reg(R::W(src_reg)), Src::ImmU16(imm)]}) => {
+				let result = regs.read_u32(src_reg) | (imm as u32);
+				regs.write_u32(dst_reg, result);
+			},
+
+			_ => { return Err(Error::Unimplemented(format!("Unknown iisa instruction ({:?}) @ {:#x}", instr, regs.pc))); },
+		}
+
+		regs.pc += instr.size as u64;
+	}
+	Ok(())
+}
+
+pub struct RegisterFile {
+	bytes: [u8;4096],
+	pub pc: u64,
+}
+
+impl RegisterFile {
+	fn new() -> RegisterFile {
+		RegisterFile {
+			bytes: [0; 4096],
+			pc:    0,
+		}
+	}
+
+	pub fn write_u32(&mut self, reg: u16, value: u32) {
+		let reg_off: usize = (reg as usize) * 4;
+		self.bytes[reg_off + 0] = (value >>  0) as u8;
+		self.bytes[reg_off + 1] = (value >>  8) as u8;
+		self.bytes[reg_off + 2] = (value >> 16) as u8;
+		self.bytes[reg_off + 3] = (value >> 24) as u8;
+	}
+
+	pub fn read_u32(&self, reg: u16) -> u32 {
+		let reg_off = (reg as usize) * 4;
+
+		((self.bytes[reg_off + 0] as u32) <<  0) |
+		((self.bytes[reg_off + 1] as u32) <<  8) |
+		((self.bytes[reg_off + 2] as u32) << 16) |
+		((self.bytes[reg_off + 3] as u32) << 24)
+	}
+}
+
+pub trait Translator {
+	fn decode(&self, base: u64, buffer: &[u8]) -> Result<Vec<Instr>, Error>;
+	fn virtual_to_phys(&self, registers: &RegisterFile, addr: u64) -> Option<u64>;
+	fn set_reg(&mut self, registers: &mut RegisterFile, reg: CpuReg, value: u64) -> Result<(), Error>;
+	fn get_reg(&self, registers: &RegisterFile, reg: CpuReg) -> Result<u64, Error>;
 }
 

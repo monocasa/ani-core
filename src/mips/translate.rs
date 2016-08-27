@@ -4,8 +4,6 @@ use super::super::iisa;
 
 use super::super::{CpuReg, Error};
 
-use std::io;
-
 extern crate opcode;
 
 #[derive(Clone, Default)]
@@ -68,7 +66,7 @@ fn sw_src(gpr_num: u8) -> iisa::Src {
 }
 
 #[allow(unused_variables)]
-fn decode_mips32(arch: &Arch, base: u64, buffer: &[u8], big_endian: bool, in_delay_slot: bool) -> Result<Vec<iisa::Instr>, io::Error> {
+fn decode_mips32(arch: &Arch, base: u64, buffer: &[u8], big_endian: bool, in_delay_slot: bool) -> Result<Vec<iisa::Instr>, Error> {
 	let decode_opts = opcode::mips::DecodeOptions{ decode_pseudo_ops: false, big_endian: big_endian };
 	let uarch_info = uarch_opts_for_arch(arch).unwrap();
 
@@ -115,7 +113,7 @@ fn decode_mips32(arch: &Arch, base: u64, buffer: &[u8], big_endian: bool, in_del
 		                             opcode::mips::Reg::Gpr(rt),
 		                             opcode::AddrTarget::Relative(offset)) => {
 			if in_delay_slot {
-				return Err(io::Error::new(io::ErrorKind::Other, format!("Branch while in delay slot")));
+				return Err(Error::Unimplemented(format!("Branch while in delay slot")));
 			}
 
 			let delay_slot_buffer = &buffer[4..];
@@ -148,7 +146,7 @@ fn decode_mips32(arch: &Arch, base: u64, buffer: &[u8], big_endian: bool, in_del
 		},
 
 		_ => {
-			return Err(io::Error::new(io::ErrorKind::Other, format!("mips32 decode Unimplemented {:?}", op)));
+			return Err(Error::Unimplemented(format!("mips32 decode Unimplemented {:?}", op)));
 		},
 	};
 
@@ -156,8 +154,8 @@ fn decode_mips32(arch: &Arch, base: u64, buffer: &[u8], big_endian: bool, in_del
 }
 
 #[allow(unused_variables)]
-fn decode_mips64(arch: &Arch, base: u64, buffer: &[u8]) -> Result<Vec<iisa::Instr>, io::Error> {
-	Err(io::Error::new(io::ErrorKind::Other, "mips64 decode Unimplemented"))
+fn decode_mips64(arch: &Arch, base: u64, buffer: &[u8]) -> Result<Vec<iisa::Instr>, Error> {
+	Err(Error::Unimplemented(format!("mips64 decode Unimplemented")))
 }
 
 fn uarch_opts_for_arch(arch: &Arch) -> Option<&'static opcode::mips::UarchInfo> {
@@ -168,17 +166,23 @@ fn uarch_opts_for_arch(arch: &Arch) -> Option<&'static opcode::mips::UarchInfo> 
 	}
 }
 
-impl MipsTranslator {
-	pub fn decode(&self, base: u64, buffer: &[u8]) -> Result<Vec<iisa::Instr>, io::Error> {
+impl iisa::Translator for MipsTranslator {
+	fn decode(&self, base: u64, buffer: &[u8]) -> Result<Vec<iisa::Instr>, Error> {
 		match isa_for_arch(&self.arch) {
 			BaseIsa::Mips32 => decode_mips32(&self.arch, base, buffer, self.big_endian, false),
 			BaseIsa::Mips64 => decode_mips64(&self.arch, base, buffer),
 		}
 	}
-}
 
-impl iisa::executor::Translator for MipsTranslator {
-	fn set_reg(&mut self, register_file: &mut iisa::executor::RegisterFile, reg: CpuReg, value: u64) -> Result<(), Error> {
+	fn virtual_to_phys(&self, _: &iisa::RegisterFile, addr: u64) -> Option<u64> {
+		match addr {
+			0x80000000 ... 0x9FFFFFFF => Some(addr - 0x80000000),
+			0xA0000000 ... 0xBFFFFFFF => Some(addr - 0xA0000000),
+			_ => None,
+		}
+	}
+
+	fn set_reg(&mut self, register_file: &mut iisa::RegisterFile, reg: CpuReg, value: u64) -> Result<(), Error> {
 		if BaseIsa::Mips32 == isa_for_arch(&self.arch) {
 			if value >= 0x100000000 {
 				return Err(Error::SetRegValueOutOfRange(reg, value));
@@ -186,7 +190,7 @@ impl iisa::executor::Translator for MipsTranslator {
 
 			match reg {
 				CpuReg::CpuSpecific(r) if r <= 31 => {
-					register_file.write_u32(r, value as u32);
+					register_file.write_u32(r as u16, value as u32);
 
 					Ok(())
 				},
@@ -206,11 +210,11 @@ impl iisa::executor::Translator for MipsTranslator {
 		}
 	}
 
-	fn get_reg(&self, register_file: &iisa::executor::RegisterFile, reg: CpuReg) -> Result<u64, Error> {
+	fn get_reg(&self, register_file: &iisa::RegisterFile, reg: CpuReg) -> Result<u64, Error> {
 		if BaseIsa::Mips32 == isa_for_arch(&self.arch) {
 			match reg {
 				CpuReg::CpuSpecific(r) if r <= 31 => {
-					Ok(register_file.read_u32(r) as u64)
+					Ok(register_file.read_u32(r as u16) as u64)
 				},
 
 				CpuReg::Pc => {
@@ -229,16 +233,17 @@ impl iisa::executor::Translator for MipsTranslator {
 
 #[cfg(test)]
 mod tests {
-	use super::super::super::iisa::{Cond,
-	                                DstSrc,
-	                                DstSrcSrc,
-	                                Instr,
-	                                Op,
-	                                Pred,
-	                                R,
-	                                Src,
-	                                SrcSrcSrc,
-	                                SrcSrcTarget};
+	use iisa::{Cond,
+	           DstSrc,
+	           DstSrcSrc,
+	           Instr,
+	           Op,
+	           Pred,
+	           R,
+	           Src,
+	           SrcSrcSrc,
+	           SrcSrcTarget,
+	           Translator};
 
 	use super::super::Arch;
 	use super::MipsTranslator;

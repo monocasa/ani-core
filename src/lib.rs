@@ -1,4 +1,5 @@
 #![cfg_attr(feature = "assignment_operators", feature(augmented_assignments, op_assign_traits))]
+#![feature(slice_patterns)]
 #[macro_use]
 extern crate bitflags;
 
@@ -43,10 +44,10 @@ pub enum CpuReg {
 
 #[derive(Clone, Debug)]
 pub enum Error {
-	Unimplemented(&'static str),
+	Unimplemented(String),
 
 	MemAllocation,
-	UnableToFindRange,
+	UnableToFindRange(u64, usize),
 
 	InvalidCpuCookie,
 
@@ -57,6 +58,9 @@ pub enum Error {
 
 	SetRegValueOutOfRange(CpuReg, u64),
 	SetRegUnknownReg(CpuReg, u64),
+
+	InvalidPC,
+	VirtualAddrNotMappable(u64),
 
 	PromiseLost,
 }

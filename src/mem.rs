@@ -91,7 +91,7 @@ impl BusMatrix {
 		}
 	}
 
-	fn find_range(&self, base: u64, len: usize) -> Result<*mut u8, Error> {
+	pub fn find_range(&self, base: u64, len: usize) -> Result<*mut u8, Error> {
 		let end = base + (len as u64);
 		for ref range in self.ranges.iter() {
 			let range_end = range.base + range.size;
@@ -108,7 +108,7 @@ impl BusMatrix {
 				_ => {},// Skip everything else
 			}
 		}
-		Err(Error::UnableToFindRange)
+		Err(Error::UnableToFindRange(base, len))
 	}
 
 	pub fn set_range(&mut self, incoming: &[u8], base: u64) -> Result<(), Error> {

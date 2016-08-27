@@ -22,3 +22,7 @@ name = "opcode"
 version = "0.1.0"
 source = "git+https://github.com/monocasa/opcode.git#05938f9c99e87e17a51161c8ca4f268774c244bd"
 
+[metadata]
+"checksum bitflags 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8dead7461c1127cf637931a1e50934eb6eee8bff2f74433ac7909e9afcee04a3"
+"checksum libc 0.2.7 (registry+https://github.com/rust-lang/crates.io-index)" = "4870ef6725dde13394134e587e4ab4eca13cb92e916209a31c851b49131d3c75"
+"checksum opcode 0.1.0 (git+https://github.com/monocasa/opcode.git)" = "<none>"

@@ -1,5 +1,9 @@
 use super::super::*;
 
+use super::RegisterFile;
+use super::Translator;
+
+use std::mem::transmute;
 use std::sync::mpsc::*;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -18,37 +22,6 @@ struct CodeHook {
 }
 
 unsafe impl Send for CodeHook { }
-
-pub struct RegisterFile {
-	bytes: [u8;4096],
-	pub pc: u64,
-}
-
-impl RegisterFile {
-	fn new() -> RegisterFile {
-		RegisterFile {
-			bytes: [0; 4096],
-			pc:    0,
-		}
-	}
-
-	pub fn write_u32(&mut self, reg: u32, value: u32) {
-		let reg_off: usize = (reg as usize) * 4;
-		self.bytes[reg_off + 0] = (value >>  0) as u8;
-		self.bytes[reg_off + 1] = (value >>  8) as u8;
-		self.bytes[reg_off + 2] = (value >> 16) as u8;
-		self.bytes[reg_off + 3] = (value >> 24) as u8;
-	}
-
-	pub fn read_u32(&self, reg: u32) -> u32 {
-		let reg_off = (reg as usize) * 4;
-
-		((self.bytes[reg_off + 0] as u32) <<  0) |
-		((self.bytes[reg_off + 1] as u32) <<  8) |
-		((self.bytes[reg_off + 2] as u32) << 16) |
-		((self.bytes[reg_off + 3] as u32) << 24)
-	}
-}
 
 enum Message {
 	Shutdown(Promise<()>),
@@ -70,11 +43,6 @@ impl FrontEnd {
 			tx: tx,
 		}
 	}
-}
-
-pub trait Translator {
-	fn set_reg(&mut self, registers: &mut RegisterFile, reg: CpuReg, value: u64) -> Result<(), Error>;
-	fn get_reg(&self, registers: &RegisterFile, reg: CpuReg) -> Result<u64, Error>;
 }
 
 impl Cpu for FrontEnd {
@@ -133,6 +101,36 @@ impl Cpu for FrontEnd {
 		let _ = self.tx.send(Message::Shutdown(promise));
 
 		let _ = future.wait();
+	}
+}
+
+const PAGE_SIZE: usize = 4096;
+
+struct Page<'a> {
+	base: u64,
+	data: &'a [u8;PAGE_SIZE],
+}
+
+impl<'a> Page<'a> {
+	fn new(base: u64, data: &'a [u8;PAGE_SIZE]) -> Page {
+		Page {
+			base: base,
+			data: data,
+		}
+	}
+
+	fn single_step(&self, reg: &mut RegisterFile, translator: &Translator) -> Result<(), Error> {
+		let offset = (reg.pc - self.base) as usize;
+
+		if offset > (PAGE_SIZE - 1) {
+			return Err(Error::InvalidPC);
+		}
+
+		let instrs = try!(translator.decode(reg.pc, &self.data[offset..]));
+
+		try!(iisa::interpret_op_list(&instrs, reg));
+
+		Ok(())
 	}
 }
 
@@ -207,10 +205,21 @@ impl<T: Send+Clone+Translator> Backend<T> {
 		true
 	}
 
-	fn single_step(&mut self) {
-		let value = self.registers.read_u32(1);
-		self.registers.write_u32(1, value | 0x3456);
-		self.registers.pc += 4;
+	fn single_step(&mut self) -> Result<(), Error> {
+		let page_virt_base = self.registers.pc & !((PAGE_SIZE as u64) - 1);
+		let page_phys_base = match self.translator.virtual_to_phys(&mut self.registers, page_virt_base) {
+			Some(virt) => virt,
+			None => return Err(Error::VirtualAddrNotMappable(page_virt_base)),
+		};
+		let page_mem = match self.fsb.find_range(page_phys_base, PAGE_SIZE) {
+			Ok(raw_ptr) => {
+				unsafe { transmute(raw_ptr) }
+			},
+			Err(err) => {
+				return Err(err);
+			},
+		};
+		Page::new(page_virt_base, page_mem).single_step(&mut self.registers, &self.translator)
 	}
 
 	fn execute(&mut self) {
@@ -232,9 +241,11 @@ impl<T: Send+Clone+Translator> Backend<T> {
 				},
 
 				ExecutionState::Executing(mut promise) => {
-					self.single_step();
+					promise.signal(match self.single_step() {
+						Ok(()) => Ok(ExitReason::CodeHookSignalledStop),
+						Err(err) => Err(err),
+					});
 
-					promise.signal(Ok(ExitReason::CodeHookSignalledStop));
 					self.execution_state = ExecutionState::Paused;
 
 					let msg = match self.rx.try_recv() {
